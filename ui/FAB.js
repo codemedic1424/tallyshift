@@ -23,21 +23,43 @@ export default function FAB({ onAddShift }) {
     }
   }, [])
 
+  // Optional: close on route change if you use Next Router
+  // (uncomment if needed)
+  // const router = useRouter()
+  // useEffect(() => {
+  //   const close = () => setOpen(false)
+  //   router.events.on('routeChangeStart', close)
+  //   return () => router.events.off('routeChangeStart', close)
+  // }, [router])
+
   return (
     <div className="fab-wrap" ref={wrapRef}>
-      {/* Menu */}
+      {/* Backdrop for menu (click to close) */}
       {open && (
-        <div className="fab-menu" role="menu">
-          <button
-            className="fab-menu-item"
-            role="menuitem"
-            onClick={(e) => {
-              e.stopPropagation()
-              setOpen(false)
-              onAddShift?.()
-            }}
-          >
-            <span className="fab-menu-label">Add new shift</span>
+        <button
+          className="fab-scrim"
+          aria-hidden
+          onClick={() => setOpen(false)}
+        />
+      )}
+
+      {/* Menu */}
+      <div
+        id="fab-menu"
+        className={`fab-menu ${open ? 'open' : ''}`}
+        role="menu"
+        aria-hidden={!open}
+      >
+        <button
+          className="fab-menu-item"
+          role="menuitem"
+          onClick={(e) => {
+            e.stopPropagation()
+            setOpen(false)
+            onAddShift?.()
+          }}
+        >
+          <span className="fab-menu-icon">
             <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
               <path
                 d="M12 5v14M5 12h14"
@@ -46,13 +68,18 @@ export default function FAB({ onAddShift }) {
                 strokeLinecap="round"
               />
             </svg>
-          </button>
-        </div>
-      )}
+          </span>
+          <span className="fab-menu-label">Add new shift</span>
+        </button>
+
+        {/* Add more actions later if you want:
+        <button className="fab-menu-item" role="menuitem">…</button>
+        */}
+      </div>
 
       {/* Main FAB */}
       <button
-        className="fab"
+        className={`fab ${open ? 'open' : ''}`}
         aria-label="Open quick actions"
         aria-expanded={open}
         aria-controls="fab-menu"
@@ -62,7 +89,7 @@ export default function FAB({ onAddShift }) {
         }}
       >
         <svg
-          className={`fab-icon ${open ? 'rot' : ''}`}
+          className="fab-icon"
           width="22"
           height="22"
           viewBox="0 0 24 24"

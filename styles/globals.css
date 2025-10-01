@@ -565,67 +565,7 @@ input[type='text'] {
   color: var(--muted);
 }
 
-/* ---------- Modal (dark by default) ---------- */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-  z-index: 100;
-}
-.modal-card {
-  width: min(560px, 92vw);
-  background: #1f2937; /* gray-800: darker modal */
-  color: #f9fafb;
-  border-radius: var(--radius);
-  border: 1px solid #374151; /* gray-700 */
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
-}
-.modal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px;
-  border-bottom: 1px solid #2b3440;
-}
-.modal-title {
-  font-weight: 800;
-  font-size: 16px;
-}
-.modal-body {
-  padding: 16px;
-  display: grid;
-  gap: 10px;
-}
-.modal-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 14px;
-}
-.modal-note {
-  font-size: 12px;
-  color: #9ca3af;
-}
-.modal-actions {
-  display: flex;
-  gap: 8px;
-  padding: 12px 16px;
-  border-top: 1px solid #2b3440;
-}
-
-/* Buttons inside the dark modal keep branded colors */
-.modal-card .btn.secondary {
-  background: transparent;
-  color: #fff;
-  border-color: #fff;
-}
-.modal-card .btn.secondary:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
+/*
 /* ---------- Auth ---------- */
 .auth-card {
   max-width: 520px;
@@ -855,4 +795,350 @@ footer {
 
 .avatar-wrap-lg:hover .avatar-overlay {
   opacity: 1;
+}
+
+/* Scrim behind the tiny menu (click to close) */
+.fab-scrim {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: default;
+  z-index: 10001; /* below the menu, above page */
+}
+
+/* Container is already positioned by .fab-wrap in your CSS */
+
+/* Menu: pretty + animated */
+.fab-menu {
+  position: absolute;
+  right: 0;
+  bottom: 64px; /* button size + gap */
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+  z-index: 10002;
+
+  opacity: 0;
+  transform: translateY(6px) scale(0.98);
+  pointer-events: none;
+
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+.fab-menu.open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+/* Menu item: pill with icon bubble */
+.fab-menu-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+
+  background: #0f172a; /* slate-900 */
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 9999px;
+  padding: 10px 14px 10px 12px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+
+  transform: translateY(2px);
+  transition:
+    transform 120ms ease,
+    background 120ms ease,
+    box-shadow 120ms ease;
+}
+.fab-menu-item:hover {
+  background: #0b1222;
+  transform: translateY(0);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.28);
+}
+
+.fab-menu-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: saturate(140%) blur(2px);
+  flex: 0 0 auto;
+}
+.fab-menu-label {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+/* Main FAB: add pop + spin animation */
+.fab {
+  /* you already set size/colors elsewhere */
+  will-change: transform, box-shadow;
+  transition:
+    transform 140ms ease,
+    box-shadow 140ms ease,
+    background 140ms ease;
+}
+.fab.open .fab-icon {
+  transform: rotate(45deg); /* plus → close */
+  transition: transform 160ms ease;
+}
+
+/* Motion-friendly for reduced motion users */
+@media (prefers-reduced-motion: reduce) {
+  .fab-menu,
+  .fab,
+  .fab-menu-item {
+    transition: none !important;
+  }
+  .fab .fab-icon {
+    transition: none !important;
+  }
+}
+
+/* === Fix password field icons === */
+.field-with-icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.field-input {
+  width: 100%;
+  padding-right: 40px; /* leave space for the icon */
+  font-size: 16px; /* prevents iOS zoom on focus */
+}
+
+.field-icon {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280; /* muted gray */
+  cursor: pointer;
+}
+
+.field-icon:hover {
+  color: #111827; /* darker on hover */
+}
+
+.field-icon:focus-visible {
+  outline: 2px solid #2563eb; /* blue ring for accessibility */
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.field-icon svg {
+  pointer-events: none; /* clicks go to the button, not the SVG */
+}
+
+/* ===== Light Mode Modals (drop-in) ===== */
+
+/* Backdrop */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000; /* above page + tabbar */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px; /* safe spacing on mobile */
+  background: rgba(0, 0, 0, 0.45);
+  -webkit-backdrop-filter: blur(0px);
+  backdrop-filter: blur(0px);
+}
+
+/* Card container */
+.modal-card {
+  width: min(640px, 92vw);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  background: #ffffff;
+  color: var(--text, #111827);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 16px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
+
+  /* pleasant entrance */
+  transform: translateY(6px) scale(0.985);
+  opacity: 0;
+  animation: modal-in 140ms ease forwards;
+}
+@keyframes modal-in {
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+/* Header */
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  background: #fff;
+}
+.modal-title {
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+/* Body */
+.modal-body {
+  flex: 1 1 auto;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+  overflow: auto; /* scroll long content */
+}
+.modal-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+.modal-note {
+  font-size: 12px;
+  color: var(--muted, #6b7280);
+}
+
+/* Footer / actions */
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border, #e5e7eb);
+  background: #fff;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+/* Inputs inside modals stay readable */
+.modal-card .input,
+.modal-card .field-input,
+.modal-card textarea,
+.modal-card select {
+  background: #fff;
+  color: var(--text, #111827);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 12px;
+}
+.modal-card .field-label {
+  color: var(--muted, #6b7280);
+}
+
+/* Secondary button on white */
+.modal-card .btn.secondary {
+  background: #fff;
+  color: var(--text, #111827);
+  border: 1px solid var(--text, #111827);
+}
+
+/* Danger/primary keep your existing palette if defined */
+.modal-card .btn.btn-danger {
+  background: #dc2626;
+  border-color: #b91c1c;
+  color: #fff;
+}
+.modal-card .btn.btn-danger:hover {
+  background: #b91c1c;
+}
+.modal-card .btn.btn-primary {
+  background: #2563eb;
+  border-color: #1d4ed8;
+  color: #fff;
+}
+.modal-card .btn.btn-primary:hover {
+  background: #1d4ed8;
+}
+
+/* Tiny close button style (if you use an icon/“×” button) */
+.modal-card .cal-btn,
+.modal-close {
+  border: 1px solid var(--border, #e5e7eb);
+  background: #fff;
+  color: var(--text, #111827);
+  padding: 6px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+/* Shift preview chips used inside DaySheet/Details */
+.modal-card .cal-shift {
+  background: #fff;
+  color: #111827;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 10px;
+  padding: 8px;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+.modal-card .cal-shift .note {
+  color: var(--muted, #6b7280);
+}
+
+/* Mobile: let the card breathe edge-to-edge without feeling cramped */
+@media (max-width: 420px) {
+  .modal-card {
+    width: 100%;
+    max-width: 520px;
+    border-radius: 14px;
+  }
+  .modal-body {
+    padding: 14px;
+  }
+  .modal-actions {
+    padding: 10px 14px;
+  }
+}
+
+.cal-add-btn {
+  width: 20px; /* smaller circle */
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: #2563eb; /* accent blue */
+  color: white;
+  font-size: 14px; /* smaller + */
+  font-weight: bold;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+}
+
+.cal-add-btn:hover {
+  background: #1d4ed8;
 }
