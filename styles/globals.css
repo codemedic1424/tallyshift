@@ -1344,3 +1344,25 @@ body {
   /* Remove any accidental overflow here so .page is the scroll owner */
   overflow: visible;
 }
+
+/* Tab bar size token */
+:root {
+  --tabbar-h: 64px; /* keep this in sync with your TabBar height */
+}
+
+/* Make sure TabBar uses the same height token */
+.tabbar {
+  height: var(--tabbar-h);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Ensure the scrollable page content clears the TabBar */
+.page {
+  /* you already have overflow:auto from earlier */
+  padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+}
+
+/* If some pages use .container as the scroller instead of .page, add this too */
+.container {
+  padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+}
