@@ -1293,3 +1293,54 @@ html.keyboard-open .tabbar {
   /* prevents content from being hidden under tabbar */
   padding-bottom: calc(72px + env(safe-area-inset-bottom));
 }
+
+/* 0) Base: never let the document body scroll */
+html,
+body {
+  height: 100%;
+}
+body {
+  overflow: hidden; /* <- lock body */
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+/* 1) Fixed viewport wrapper (prevents browser UI from pushing content) */
+.app-viewport {
+  position: fixed;
+  inset: 0;
+  /* modern dynamic viewport unit handles iOS toolbars better */
+  height: 100dvh; /* fallback handled by 'inset:0' */
+  width: 100%;
+  overflow: hidden; /* child will scroll, not body */
+  background: var(--bg, #f9fafb);
+}
+
+/* 2) Make your per-page container the *only* scrollable area */
+.page {
+  /* Fill the fixed viewport */
+  height: 100%;
+  overflow: auto; /* <- scroll here only */
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+
+  /* Keep content clear of the fixed TabBar */
+  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+}
+
+/* 3) Keep the TabBar hard-pinned (works with your vv-offset hack) */
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--vv-offset, 0px));
+  z-index: 1000;
+
+  /* your existing styles… */
+}
+
+/* (Optional) prevent a nested scroll from creating a second scroll root */
+.container {
+  /* Remove any accidental overflow here so .page is the scroll owner */
+  overflow: visible;
+}

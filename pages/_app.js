@@ -11,7 +11,7 @@ function AuthGuard({ children }) {
   const router = useRouter()
   const { user, loading } = useUser()
 
-  // If we're on a private route and not logged in, send to /login
+  // Redirect to /login for private routes
   useEffect(() => {
     if (loading) return
     const isPublic = PUBLIC_ROUTES.includes(router.pathname)
@@ -20,26 +20,16 @@ function AuthGuard({ children }) {
     }
   }, [loading, user, router.pathname])
 
-  // Simple splash while we decide
   if (loading) return <div style={{ padding: 24 }}>Loading…</div>
 
   const isPublic = PUBLIC_ROUTES.includes(router.pathname)
-  if (!isPublic && !user) return null // prevent flicker (we're redirecting)
+  if (!isPublic && !user) return null // prevent flicker during redirect
 
   return children
 }
 
-function MyApp({ Component, pageProps }) {
-  return (
-    <>
-      <Component {...pageProps} />
-      <SpeedInsights />
-    </>
-  )
-}
-
-export default function App({ Component, pageProps }) {
-  // one-time cleanup of any old localStorage sessions (from earlier experiments)
+export default function MyApp({ Component, pageProps }) {
+  // (Optional) one-time cleanup from earlier experiments
   useEffect(() => {
     try {
       Object.keys(localStorage)
@@ -51,7 +41,14 @@ export default function App({ Component, pageProps }) {
   return (
     <UserProvider>
       <AuthGuard>
-        <Component {...pageProps} />
+        {/* Fixed viewport wrapper so only inner .page scrolls;
+            keep TabBar fixed to the window bottom */}
+        <div id="app-viewport" className="app-viewport">
+          <Component {...pageProps} />
+        </div>
+
+        {/* Load once, outside individual pages */}
+        <SpeedInsights />
       </AuthGuard>
     </UserProvider>
   )
