@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useUser } from '../lib/useUser'
 import HeaderBar from '../ui/HeaderBar'
 import TabBar from '../ui/TabBar'
-import { SettingsPanel } from './settings'
+import SettingsModal from '../ui/SettingsModal'
 
 export default function Profile() {
   const { user } = useUser()
@@ -13,7 +13,8 @@ export default function Profile() {
   // persisted profile fields
   const [first, setFirst] = useState('')
   const [last, setLast] = useState('')
-  const [avatarUrl, setAvatarUrl] = useState('')
+  const [avatarUrl, setAvatarUrl] = useState('') // signed URL for rendering
+  const [avatarPath, setAvatarPath] = useState('') // STORAGE PATH (private)
   const [email, setEmail] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
 
@@ -60,24 +61,50 @@ export default function Profile() {
   const [deleting, setDeleting] = useState(false)
   const [deleteErr, setDeleteErr] = useState(null)
 
+  // ---------- Load profile (includes avatar_path) ----------
   useEffect(() => {
     if (!user) return
     setEmail(user.email || '')
     ;(async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('first_name,last_name,avatar_url')
+        .select('first_name,last_name,avatar_path')
         .eq('id', user.id)
         .single()
       if (!error && data) {
         setFirst(data.first_name || '')
         setLast(data.last_name || '')
-        setAvatarUrl(data.avatar_url || '')
+        setAvatarPath(data.avatar_path || '') // <- key: we store path, not URL
         setTmpFirst(data.first_name || '')
         setTmpLast(data.last_name || '')
       }
     })()
   }, [user])
+
+  // ---------- Helper: signed URL from private path ----------
+  async function getSignedUrl(path) {
+    if (!path) return ''
+    const { data, error } = await supabase.storage
+      .from('avatars')
+      .createSignedUrl(path, 60 * 60) // 1 hour
+    return error ? '' : data?.signedUrl || ''
+  }
+
+  // ---------- Resolve signed URL whenever avatarPath changes ----------
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      if (!avatarPath) {
+        setAvatarUrl('')
+        return
+      }
+      const url = await getSignedUrl(avatarPath)
+      if (alive) setAvatarUrl(url)
+    })()
+    return () => {
+      alive = false
+    }
+  }, [avatarPath])
 
   async function saveProfile(e) {
     e?.preventDefault()
@@ -90,7 +117,7 @@ export default function Profile() {
       id: user.id,
       first_name: nextFirst,
       last_name: nextLast,
-      avatar_url: avatarUrl || null,
+      avatar_path: avatarPath || null, // <- store the private path
     }
     const { error } = await supabase.from('profiles').upsert(payload)
     setSaving(false)
@@ -102,6 +129,10 @@ export default function Profile() {
       setEditingName(false)
       setPendingAvatar(false)
       setMsg('Profile updated.')
+      // refresh signed URL after save (optional)
+      if (avatarPath) {
+        getSignedUrl(avatarPath).then(setAvatarUrl)
+      }
     }
   }
 
@@ -145,22 +176,39 @@ export default function Profile() {
     }
   }
 
+  // ---------- Upload to private Storage; keep only PATH ----------
   async function onUploadAvatar(file) {
     if (!file || !user) return
     setErr(null)
     setMsg(null)
     setUploading(true)
+
     try {
+      // local preview
       const objectUrl = URL.createObjectURL(file)
       setPreview(objectUrl)
-      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
-      const path = `${user.id}.${ext}`
+
+      // basic guards (optional)
+      const maxBytes = 2 * 1024 * 1024 // 2 MB
+      if (file.size > maxBytes) throw new Error('Image must be ≤ 2 MB.')
+      if (!file.type.startsWith('image/'))
+        throw new Error('File must be an image.')
+
+      // path: avatars/{uid}/{timestamp}-{originalName}
+      const safeName = file.name.replace(/\s+/g, '_')
+      const path = `${user.id}/${Date.now()}-${safeName}`
+
       const { error: upErr } = await supabase.storage
         .from('avatars')
-        .upload(path, file, { upsert: true, contentType: file.type })
+        .upload(path, file, {
+          upsert: true,
+          cacheControl: '3600',
+          contentType: file.type || 'image/jpeg',
+        })
       if (upErr) throw upErr
-      const { data } = supabase.storage.from('avatars').getPublicUrl(path)
-      setAvatarUrl(data?.publicUrl || '')
+
+      // store the PATH; signed URL will resolve via effect
+      setAvatarPath(path)
       setPendingAvatar(true)
       setMsg('Photo uploaded. Click “Save profile” to apply.')
     } catch (e3) {
@@ -172,7 +220,12 @@ export default function Profile() {
 
   async function logout() {
     setSettingsOpen(false)
-    await supabase.auth.signOut()
+    const { error } = await supabase.auth.signOut()
+    if (error) {
+      console.error('Error signing out:', error.message)
+    } else {
+      window.location.href = '/login'
+    }
   }
 
   // Delete account flow
@@ -296,7 +349,7 @@ export default function Profile() {
                 )}
 
                 <div className="avatar-overlay">
-                  <span>Change</span>
+                  <span>{uploading ? 'Uploading…' : 'Change'}</span>
                 </div>
                 <input
                   ref={fileRef}
@@ -311,10 +364,23 @@ export default function Profile() {
                 <button
                   type="button"
                   className="linkbtn"
-                  onClick={() => {
-                    setPreview('')
-                    setAvatarUrl('')
-                    setPendingAvatar(true)
+                  onClick={async () => {
+                    try {
+                      setErr(null)
+                      // delete the stored object if we have a path
+                      if (avatarPath) {
+                        const { error: delErr } = await supabase.storage
+                          .from('avatars')
+                          .remove([avatarPath])
+                        if (delErr) throw delErr
+                      }
+                      setPreview('')
+                      setAvatarUrl('')
+                      setAvatarPath('')
+                      setPendingAvatar(true)
+                    } catch (e) {
+                      setErr(e.message || 'Failed to remove photo.')
+                    }
                   }}
                 >
                   Remove photo
@@ -698,50 +764,12 @@ export default function Profile() {
         </div>
       )}
       {settingsOpen && (
-        <div className="modal-backdrop" onClick={() => setSettingsOpen(false)}>
-          <div
-            className="modal-card"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="profile-settings-title"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: '100%',
-              maxWidth: 520,
-              maxHeight: '90vh',
-              overflow: 'auto',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 16,
-            }}
-          >
-            <div
-              className="modal-head"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 8,
-              }}
-            >
-              <div className="modal-title" id="profile-settings-title">
-                Settings
-              </div>
-              <button
-                type="button"
-                className="cal-btn"
-                onClick={() => setSettingsOpen(false)}
-                aria-label="Close settings"
-              >
-                Close
-              </button>
-            </div>
-            <div className="modal-body" style={{ padding: 0 }}>
-              <SettingsPanel />
-            </div>
-          </div>
-        </div>
+        <SettingsModal
+          open={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+        />
       )}
+
       <TabBar />
     </div>
   )

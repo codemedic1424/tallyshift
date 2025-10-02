@@ -1,11 +1,9 @@
-// pages/settings.js
+// ui/SettingsPanel.jsx
 import { useState } from 'react'
-import HeaderBar from '../ui/HeaderBar'
-import TabBar from '../ui/TabBar'
 import { useUser } from '../lib/useUser'
 import { useSettings } from '../lib/useSettings'
 
-export function SettingsPanel() {
+export default function SettingsPanel() {
   const { user } = useUser()
   const { settings, saveSettings, loading, error } = useSettings()
   const [saving, setSaving] = useState(false)
@@ -23,8 +21,7 @@ export function SettingsPanel() {
 
   return (
     <div className="settings-panel" style={{ display: 'grid', gap: 12 }}>
-      {loading && <div className="card">Loading...</div>}
-
+      {loading && <div className="card">Loading…</div>}
       {error && (
         <div
           className="card"
@@ -77,7 +74,9 @@ export function SettingsPanel() {
             >
               <option value="USD">USD - $</option>
               <option value="CAD">CAD - $</option>
-              <option value="EUR">EUR - �</option>
+              <option value="EUR">EUR - €</option>
+              <option value="GBP">GBP - £</option>
+              <option value="AUD">AUD - $</option>
             </select>
           </div>
 
@@ -136,8 +135,8 @@ export function SettingsPanel() {
               }}
             />
             <div className="note" style={{ marginTop: 6 }}>
-              Prefills the tip-out field when adding a shift (you can still edit
-              per shift).
+              Prefills the tip-out field when adding a shift (editable per
+              shift).
             </div>
           </div>
 
@@ -156,33 +155,11 @@ export function SettingsPanel() {
               {JSON.stringify(settings || {}, null, 2)}
             </pre>
             <div className="note" style={{ marginTop: 6 }}>
-              {saving ? 'Saving...' : 'Saved'}
+              {saving ? 'Saving…' : 'Saved'}
             </div>
           </div>
         </>
       )}
-    </div>
-  )
-}
-
-export default function SettingsPage() {
-  const { user } = useUser()
-  if (!user) return null
-
-  return (
-    <div className="page">
-      <HeaderBar />
-      <div className="container" style={{ paddingBottom: 96 }}>
-        <div className="card">
-          <div className="h1">Settings</div>
-          <div className="note">
-            Configure how TallyShift behaves. Changes save instantly.
-          </div>
-        </div>
-
-        <SettingsPanel />
-      </div>
-      <TabBar />
     </div>
   )
 }
