@@ -8,13 +8,10 @@ import { useSettings } from '../lib/useSettings'
 import HeaderBar from '../ui/HeaderBar'
 import TabBar from '../ui/TabBar'
 import ShiftDetailsModal from '../ui/ShiftDetailsModal'
+import AddShiftModal from '../ui/AddShiftModal'
 
 // ---------- helpers ----------
-const S = {
-  ndash: '\u2013', // –
-  times: '\u00D7', // ×
-  middot: '\u00B7', // ·
-}
+const S = { ndash: '\u2013', times: '\u00D7', middot: '\u00B7' }
 
 function startOfDay(d) {
   const x = new Date(d)
@@ -49,7 +46,7 @@ function sameDate(a, b) {
     a.getDate() === b.getDate()
   )
 }
-// Stable local YYYY-MM-DD (no UTC shift)
+// Stable local YYYY-MM-DD
 function dateKeyLocal(d) {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
@@ -84,19 +81,11 @@ export default function CalendarPage({ theme, setTheme }) {
   const [rows, setRows] = useState([])
   const [selectedShift, setSelectedShift] = useState(null)
 
-  // add-shift modal (inline)
+  // Add-shift modal (external component)
   const [addOpen, setAddOpen] = useState(false)
   const [addDate, setAddDate] = useState(dateKeyLocal(new Date()))
-  const [hours, setHours] = useState('')
-  const [sales, setSales] = useState('')
-  const [cash, setCash] = useState('')
-  const [card, setCard] = useState('')
-  const [tipOut, setTipOut] = useState('')
-  const [notes, setNotes] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [tipOutDirty, setTipOutDirty] = useState(false)
 
-  // mobile "day sheet" (list of shifts for tapped day)
+  // mobile day sheet
   const [daySheetOpen, setDaySheetOpen] = useState(false)
   const [daySheetDate, setDaySheetDate] = useState(dateKeyLocal(new Date()))
 
@@ -112,7 +101,7 @@ export default function CalendarPage({ theme, setTheme }) {
 
   const isSmall = useIsSmall(640)
 
-  // currency helpers
+  // currency + payout flags (still used throughout this page)
   const currencyCode = settings?.currency || 'USD'
   const currencyFormatter = useMemo(
     () =>
@@ -125,78 +114,15 @@ export default function CalendarPage({ theme, setTheme }) {
     [currencyCode],
   )
   const payoutMode = settings?.payout_mode || 'both'
-  const showCashInput = payoutMode === 'both' || payoutMode === 'cash_only'
-  const showCardInput = payoutMode === 'both' || payoutMode === 'card_only'
   const tipsOnPaycheck = payoutMode === 'on_paycheck'
+  const showCashInput =
+    !tipsOnPaycheck && (payoutMode === 'both' || payoutMode === 'cash_only')
+  const showCardInput =
+    !tipsOnPaycheck && (payoutMode === 'both' || payoutMode === 'card_only')
   const defaultTipoutPct =
     typeof settings?.default_tipout_pct === 'number'
       ? settings.default_tipout_pct
       : null
-
-  const currencySymbol = useMemo(() => {
-    const sample = currencyFormatter.format(0)
-    const symbol = sample.replace(/[0-9.,\s\u00A0]/g, '').trim()
-    return symbol || currencyCode
-  }, [currencyFormatter, currencyCode])
-
-  // format/sanitize helpers (same as your prior)
-  const sanitizeCurrencyValue = (input) => {
-    if (!input) return ''
-    const digits = String(input).replace(/\D/g, '')
-    if (!digits) return ''
-    return (parseInt(digits, 10) / 100).toFixed(2)
-  }
-  const sanitizeHoursValue = (input) => {
-    if (!input) return ''
-    const digits = String(input).replace(/\D/g, '')
-    if (!digits) return ''
-    return (parseInt(digits, 10) / 100).toFixed(2)
-  }
-  const formatCurrencyValue = (input) => {
-    if (!input) return ''
-    const amount = Number(input)
-    if (Number.isNaN(amount)) return ''
-    return amount.toFixed(2)
-  }
-  const formatHoursOnBlur = (val) => {
-    if (!val) return ''
-    const n = Number(val)
-    if (Number.isNaN(n)) return ''
-    const snapped = Math.round(n * 4) / 4
-    return snapped.toFixed(2)
-  }
-  const renderCurrencyInput = (
-    value,
-    onChange,
-    onBlur,
-    placeholder = '0.00',
-  ) => (
-    <div style={{ position: 'relative', width: '100%' }}>
-      <span
-        style={{
-          position: 'absolute',
-          left: 12,
-          top: '50%',
-          transform: 'translateY(-50%)',
-          color: '#6b7280',
-          fontSize: 14,
-        }}
-      >
-        {currencySymbol}
-      </span>
-      <input
-        type="text"
-        inputMode="decimal"
-        className="input"
-        style={{ paddingLeft: 28 }}
-        placeholder={placeholder}
-        value={value}
-        onChange={onChange}
-        onBlur={onBlur}
-        autoComplete="off"
-      />
-    </div>
-  )
 
   // --- initial view from URL or settings (do NOT force switch on mobile) ---
   useEffect(() => {
@@ -211,13 +137,6 @@ export default function CalendarPage({ theme, setTheme }) {
       if (router.query.add === '1') {
         const iso = dateKeyLocal(d)
         setAddDate(iso)
-        setHours('')
-        setSales('')
-        setCash('')
-        setCard('')
-        setTipOut('')
-        setTipOutDirty(false)
-        setNotes('')
         setAddOpen(true)
       }
     }
@@ -231,33 +150,6 @@ export default function CalendarPage({ theme, setTheme }) {
       setViewInitialized(true)
     }
   }, [defaultViewSetting, viewInitialized])
-
-  // auto-calc tipout in Add modal
-  useEffect(() => {
-    if (!addOpen) return
-    if (tipOutDirty) return
-    if (defaultTipoutPct == null) return
-    if (tipsOnPaycheck) return
-    const cashValue = showCashInput ? Number(formatCurrencyValue(cash) || 0) : 0
-    const cardValue = showCardInput ? Number(formatCurrencyValue(card) || 0) : 0
-    const totalTips = cashValue + cardValue
-    if (totalTips <= 0) {
-      if (tipOut !== '') setTipOut('')
-      return
-    }
-    const computed = ((totalTips * defaultTipoutPct) / 100).toFixed(2)
-    if (tipOut !== computed) setTipOut(computed)
-  }, [
-    addOpen,
-    cash,
-    card,
-    defaultTipoutPct,
-    tipOutDirty,
-    tipOut,
-    showCashInput,
-    showCardInput,
-    tipsOnPaycheck,
-  ])
 
   // range for current view
   const range = useMemo(() => {
@@ -298,7 +190,7 @@ export default function CalendarPage({ theme, setTheme }) {
   const byDate = useMemo(() => {
     const map = new Map()
     for (const r of rows) {
-      const k = r.date // already 'YYYY-MM-DD'
+      const k = r.date // 'YYYY-MM-DD'
       if (!map.has(k)) map.set(k, [])
       map.get(k).push(r)
     }
@@ -357,7 +249,6 @@ export default function CalendarPage({ theme, setTheme }) {
       if (e.key === 'Escape') {
         setSelectedShift(null)
         setAddOpen(false)
-        setTipOutDirty(false)
         setDaySheetOpen(false)
       }
     }
@@ -369,61 +260,24 @@ export default function CalendarPage({ theme, setTheme }) {
   function openAddFor(dateObj) {
     const k = dateKeyLocal(dateObj)
     setAddDate(k)
-    setHours('')
-    setSales('')
-    setCash('')
-    setCard('')
-    setTipOut('')
-    setTipOutDirty(false)
-    setNotes('')
     setAddOpen(true)
   }
 
-  // save new shift
-  async function saveNewShift() {
+  // save new shift coming back from AddShiftModal
+  async function handleAddSave(payload) {
     if (!user) return alert('Sign in first')
-    setSaving(true)
-    const payload = {
-      user_id: user.id,
-      date: addDate, // YYYY-MM-DD local
-      hours: Number(hours || 0),
-      sales: Number(formatCurrencyValue(sales) || 0),
-      cash_tips:
-        !tipsOnPaycheck && showCashInput
-          ? Number(formatCurrencyValue(cash) || 0)
-          : 0,
-      card_tips:
-        !tipsOnPaycheck && showCardInput
-          ? Number(formatCurrencyValue(card) || 0)
-          : 0,
-      tip_out_total: Number(formatCurrencyValue(tipOut) || 0),
-      notes,
-    }
+    const dbRow = { user_id: user.id, ...payload }
     const { data, error } = await supabase
       .from('shifts')
-      .insert(payload)
+      .insert(dbRow)
       .select('*')
       .single()
-    setSaving(false)
     if (error) {
       alert(error.message)
       return
     }
     setRows((prev) => [...prev, data])
     setAddOpen(false)
-    setTipOutDirty(false)
-  }
-
-  // cells to render
-  const cells = []
-  if (view === 'day') {
-    cells.push(startOfDay(cursor))
-  } else if (view === 'week') {
-    const start = startOfWeek(cursor, weekStartSetting)
-    for (let i = 0; i < 7; i++) cells.push(addDays(start, i))
-  } else {
-    const start = startOfWeek(startOfMonth(cursor), weekStartSetting)
-    for (let i = 0; i < 42; i++) cells.push(addDays(start, i))
   }
 
   if (loading)
@@ -445,7 +299,18 @@ export default function CalendarPage({ theme, setTheme }) {
       </div>
     )
 
-  // render
+  // cells to render
+  const cells = []
+  if (view === 'day') {
+    cells.push(startOfDay(cursor))
+  } else if (view === 'week') {
+    const start = startOfWeek(cursor, weekStartSetting)
+    for (let i = 0; i < 7; i++) cells.push(addDays(start, i))
+  } else {
+    const start = startOfWeek(startOfMonth(cursor), weekStartSetting)
+    for (let i = 0; i < 42; i++) cells.push(addDays(start, i))
+  }
+
   return (
     <div className="page">
       <HeaderBar />
@@ -524,7 +389,7 @@ export default function CalendarPage({ theme, setTheme }) {
           <div className="h1">{currencyFormatter.format(totals.eff)} /h</div>
         </div>
 
-        {/* Weekday headers: always show for week & month */}
+        {/* Weekday headers */}
         {view !== 'day' && (
           <div className="cal-grid cal-week" style={{ marginBottom: 6 }}>
             {weekdayLabels.map((label) => (
@@ -559,14 +424,13 @@ export default function CalendarPage({ theme, setTheme }) {
             const inMonth =
               date.getMonth() === cursor.getMonth() || view !== 'month'
 
-            // COMPACT rendering (mobile for week/month)
+            // COMPACT (mobile for week/month)
             const compactCell = (innerLabel) => (
               <div
                 key={index}
                 className={`cal-cell compact ${hasShifts ? 'busy' : ''}`}
                 style={{ opacity: view === 'month' && !inMonth ? 0.45 : 1 }}
                 onClick={() => {
-                  // open day sheet on tap
                   setDaySheetDate(key)
                   setDaySheetOpen(true)
                 }}
@@ -576,13 +440,11 @@ export default function CalendarPage({ theme, setTheme }) {
                     {innerLabel}
                   </span>
                 </div>
-                {/* dot indicator if has shifts */}
                 {hasShifts && <div className="dot" aria-hidden />}
               </div>
             )
 
             if (isSmall && (view === 'month' || view === 'week')) {
-              // Month: show date number; Week: show weekday+day
               const label =
                 view === 'month'
                   ? date.getDate()
@@ -593,9 +455,8 @@ export default function CalendarPage({ theme, setTheme }) {
               return compactCell(label)
             }
 
-            // DESKTOP (or day view): original richer cells
+            // DESKTOP or day view
             if (view === 'day') {
-              // just one cell for the day
               return (
                 <div key={index} className="cal-cell">
                   <div className="cal-cell-head">
@@ -646,7 +507,6 @@ export default function CalendarPage({ theme, setTheme }) {
               )
             }
 
-            // Desktop WEEK/MONTH with previews
             return (
               <div
                 key={index}
@@ -657,9 +517,7 @@ export default function CalendarPage({ theme, setTheme }) {
                   <span className={today ? 'cal-cell-today' : ''}>
                     {view === 'month'
                       ? date.getDate()
-                      : date.toLocaleDateString(undefined, {
-                          day: 'numeric',
-                        })}
+                      : date.toLocaleDateString(undefined, { day: 'numeric' })}
                   </span>
                   <button
                     className="cal-btn"
@@ -744,7 +602,7 @@ export default function CalendarPage({ theme, setTheme }) {
         />
       )}
 
-      {/* MOBILE Day sheet: list shifts for tapped day */}
+      {/* MOBILE Day sheet */}
       {daySheetOpen && (
         <div
           className="modal-backdrop"
@@ -783,22 +641,16 @@ export default function CalendarPage({ theme, setTheme }) {
                 <div className="note">No shifts yet for this day.</div>
               )}
               {(byDate.get(daySheetDate) || []).map((shift) => {
-                // Safe numeric parsing
                 const cash = Number(shift?.cash_tips ?? 0)
                 const card = Number(shift?.card_tips ?? 0)
                 const tipout = Number(shift?.tip_out_total ?? 0)
                 const hours = Number(shift?.hours ?? 0)
-
                 const net = cash + card - tipout
                 const eff = hours > 0 ? net / hours : 0
-
-                // Safe currency formatter fallback
                 const fmt = (n) =>
-                  currencyFormatter &&
-                  typeof currencyFormatter.format === 'function'
+                  currencyFormatter?.format
                     ? currencyFormatter.format(n)
                     : `$${Number(n || 0).toFixed(2)}`
-
                 return (
                   <div
                     key={shift.id}
@@ -820,7 +672,6 @@ export default function CalendarPage({ theme, setTheme }) {
                       <b>{fmt(net)}</b> {S.middot} {hours.toFixed(2)}h
                     </div>
                     <div className="note">{fmt(eff)} /h</div>
-
                     {shift?.notes ? (
                       <div className="note" style={{ marginTop: 4 }}>
                         {shift.notes}
@@ -845,215 +696,17 @@ export default function CalendarPage({ theme, setTheme }) {
         </div>
       )}
 
-      {/* ADD-SHIFT MODAL (kept from your original) */}
       {addOpen && (
-        <div
-          className="modal-backdrop"
-          onClick={() => {
-            setAddOpen(false)
-            setTipOutDirty(false)
-          }}
-        >
-          <div
-            className="modal-card"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: 'min(640px, calc(100vw - 32px))',
-              maxHeight: '90vh',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 16,
-            }}
-          >
-            <div className="modal-head" style={{ alignItems: 'flex-start' }}>
-              <div className="modal-title">Add shift</div>
-              <button
-                className="cal-btn"
-                onClick={() => {
-                  setAddOpen(false)
-                  setTipOutDirty(false)
-                }}
-                aria-label="Close add shift modal"
-              >
-                {S.times}
-              </button>
-            </div>
-            <div
-              className="modal-body"
-              style={{
-                display: 'grid',
-                gap: 20,
-                overflowY: 'auto',
-                paddingRight: 4,
-              }}
-            >
-              <div style={{ display: 'grid', gap: 12 }}>
-                <div
-                  className="note"
-                  style={{
-                    fontSize: 11,
-                    letterSpacing: '0.08em',
-                    textTransform: 'uppercase',
-                    fontWeight: 600,
-                    color: '#6b7280',
-                  }}
-                >
-                  Shift basics
-                </div>
-                <div style={{ display: 'grid', gap: 12 }}>
-                  <label className="field">
-                    <span className="field-label">Date</span>
-                    <input
-                      className="input"
-                      type="date"
-                      value={addDate}
-                      onChange={(e) => setAddDate(e.target.value)}
-                    />
-                  </label>
-                  <label className="field">
-                    <span className="field-label">Hours worked</span>
-                    <input
-                      className="input"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="0.00"
-                      value={hours}
-                      onChange={(e) =>
-                        setHours(sanitizeHoursValue(e.target.value))
-                      }
-                      onBlur={() => setHours((v) => formatHoursOnBlur(v))}
-                    />
-                  </label>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gap: 12 }}>
-                <div
-                  className="note"
-                  style={{
-                    fontSize: 11,
-                    letterSpacing: '0.08em',
-                    textTransform: 'uppercase',
-                    fontWeight: 600,
-                    color: '#6b7280',
-                  }}
-                >
-                  Sales & tips
-                </div>
-                <div style={{ display: 'grid', gap: 12 }}>
-                  <label className="field">
-                    <span className="field-label">Sales</span>
-                    {renderCurrencyInput(
-                      sales,
-                      (e) => setSales(sanitizeCurrencyValue(e.target.value)),
-                      () => setSales((prev) => formatCurrencyValue(prev)),
-                    )}
-                  </label>
-
-                  {!tipsOnPaycheck ? (
-                    <>
-                      {showCashInput && (
-                        <label className="field">
-                          <span className="field-label">Cash tips</span>
-                          {renderCurrencyInput(
-                            cash,
-                            (e) =>
-                              setCash(sanitizeCurrencyValue(e.target.value)),
-                            () => setCash((prev) => formatCurrencyValue(prev)),
-                          )}
-                        </label>
-                      )}
-                      {showCardInput && (
-                        <label className="field">
-                          <span className="field-label">Card tips</span>
-                          {renderCurrencyInput(
-                            card,
-                            (e) =>
-                              setCard(sanitizeCurrencyValue(e.target.value)),
-                            () => setCard((prev) => formatCurrencyValue(prev)),
-                          )}
-                        </label>
-                      )}
-                    </>
-                  ) : (
-                    <div className="note" style={{ marginTop: -4 }}>
-                      Tips are recorded on your paycheck per profile settings.
-                    </div>
-                  )}
-
-                  <label className="field">
-                    <span className="field-label">Tip-out</span>
-                    {renderCurrencyInput(
-                      tipOut,
-                      (e) => {
-                        setTipOutDirty(true)
-                        setTipOut(sanitizeCurrencyValue(e.target.value))
-                      },
-                      () =>
-                        setTipOut((prev) =>
-                          prev ? formatCurrencyValue(prev) : '',
-                        ),
-                    )}
-                    {defaultTipoutPct != null && !tipsOnPaycheck && (
-                      <div className="note" style={{ marginTop: 4 }}>
-                        Auto-filled at {defaultTipoutPct}% of tips. Adjust if
-                        needed.
-                      </div>
-                    )}
-                  </label>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gap: 8 }}>
-                <div
-                  className="note"
-                  style={{
-                    fontSize: 11,
-                    letterSpacing: '0.08em',
-                    textTransform: 'uppercase',
-                    fontWeight: 600,
-                    color: '#6b7280',
-                  }}
-                >
-                  Notes
-                </div>
-                <textarea
-                  className="input"
-                  rows={3}
-                  value={notes}
-                  placeholder="Anything worth remembering about this shift?"
-                  onChange={(e) => setNotes(e.target.value)}
-                />
-              </div>
-            </div>
-            <div
-              className="modal-actions"
-              style={{ justifyContent: 'flex-end', gap: 12, flexWrap: 'wrap' }}
-            >
-              <button
-                className="btn btn-primary"
-                onClick={saveNewShift}
-                disabled={saving}
-              >
-                {saving ? 'Saving...' : 'Save shift'}
-              </button>
-              <button
-                className="btn secondary"
-                onClick={() => {
-                  setAddOpen(false)
-                  setTipOutDirty(false)
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+        <AddShiftModal
+          open={true}
+          initialDate={addDate}
+          onClose={() => setAddOpen(false)}
+          onSave={handleAddSave}
+        />
       )}
 
       {/* Inline compact styles specific to this page */}
       <style jsx>{`
-        /* Compact grid tweaks for small screens */
         :global(.cal-grid.cal-week.compact),
         :global(.cal-grid.cal-month.compact) {
           grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -1074,7 +727,6 @@ export default function CalendarPage({ theme, setTheme }) {
           padding: 2px 8px;
           border-radius: 999px;
         }
-        /* indicator dot if the day has shifts */
         :global(.cal-cell.compact .dot) {
           width: 6px;
           height: 6px;
@@ -1083,12 +735,9 @@ export default function CalendarPage({ theme, setTheme }) {
           align-self: flex-start;
           margin-left: 2px;
         }
-        /* Slight accent for busy days */
         :global(.cal-cell.compact.busy) {
           background: #f9fafb;
         }
-
-        /* Prevent overflow in any grid cell */
         :global(.cal-cell),
         :global(.cal-shift),
         :global(.cal-more) {
@@ -1098,10 +747,6 @@ export default function CalendarPage({ theme, setTheme }) {
         :global(.cal-shift .note) {
           min-width: 0;
         }
-
-        /* One-line weekday in compact week header is omitted already above */
-
-        /* Make weekday header tighter when present */
         @media (max-width: 640px) {
           :global(.cal-header .cal-title) {
             font-size: 16px;
