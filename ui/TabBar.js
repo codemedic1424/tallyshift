@@ -2,9 +2,16 @@
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import { Home, Calendar, Clock, BarChart2, User } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 export default function TabBar() {
   const router = useRouter()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const tabs = [
     { href: '/', label: 'Home', icon: Home },
@@ -14,8 +21,8 @@ export default function TabBar() {
     { href: '/profile', label: 'Profile', icon: User }, // ✅ new tab
   ]
 
-  return (
-    <nav className="tabbar">
+  const bar = (
+    <nav className="tabbar" role="navigation" aria-label="Bottom navigation">
       {tabs.map((t) => {
         const Icon = t.icon
         const active = router.pathname === t.href
@@ -33,4 +40,7 @@ export default function TabBar() {
       })}
     </nav>
   )
+
+  // render into <body> so it's always viewport-fixed
+  return mounted ? createPortal(bar, document.body) : null
 }
