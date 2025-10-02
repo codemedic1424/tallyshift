@@ -3,6 +3,7 @@ import '../styles/globals.css'
 import { useEffect } from 'react'
 import { useRouter } from 'next/router'
 import { UserProvider, useUser } from '../lib/useUser'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 
 const PUBLIC_ROUTES = ['/login', '/reset', '/reset-sent']
 
@@ -26,6 +27,15 @@ function AuthGuard({ children }) {
   if (!isPublic && !user) return null // prevent flicker (we're redirecting)
 
   return children
+}
+
+function MyApp({ Component, pageProps }) {
+  return (
+    <>
+      <Component {...pageProps} />
+      <SpeedInsights />
+    </>
+  )
 }
 
 export default function App({ Component, pageProps }) {
