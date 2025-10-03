@@ -1,5 +1,6 @@
 // ui/AddShiftModal.jsx
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useSettings } from '../lib/useSettings'
 
 // Local-safe YYYY-MM-DD from a Date
@@ -76,7 +77,6 @@ export default function AddShiftModal({
       setJobId(null)
       return
     }
-    // if previously selected job still exists & active, keep it; else select first
     if (jobId && activeJobsForLocation.some((j) => j.id === jobId)) return
     setJobId(activeJobsForLocation[0]?.id || null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -93,10 +93,16 @@ export default function AddShiftModal({
     setTipOut('')
     setNotes('')
     setTipOutDirty(false)
-    // reset location/job to defaults on each open
     setLocationId(defaultLocationId || null)
     setJobId(null)
   }, [open, initialDate, defaultLocationId])
+
+  // lock background scroll while modal is open (your CSS supports body.modal-open)
+  useEffect(() => {
+    if (!open) return
+    document.body.classList.add('modal-open')
+    return () => document.body.classList.remove('modal-open')
+  }, [open])
 
   // helpers
   const sanitizeCurrencyValue = (input) => {
@@ -120,7 +126,6 @@ export default function AddShiftModal({
     if (!val) return ''
     const n = Number(val)
     if (Number.isNaN(n)) return ''
-    // IMPORTANT: no quarter-hour snapping; just normalize to 2 decimals
     return n.toFixed(2)
   }
 
@@ -191,12 +196,10 @@ export default function AddShiftModal({
     setSaving(true)
     const payload = {
       date,
-      // respect Track Hours / Track Sales
       hours: settings?.track_hours ? Number(hours || 0) : 0,
       sales: settings?.track_sales
         ? Number(formatCurrencyValue(sales) || 0)
         : 0,
-
       cash_tips:
         !tipsOnPaycheck && showCashInput
           ? Number(formatCurrencyValue(cash) || 0)
@@ -207,8 +210,6 @@ export default function AddShiftModal({
           : 0,
       tip_out_total: Number(formatCurrencyValue(tipOut) || 0),
       notes,
-
-      // NEW: location & job
       location_id: currentLocation?.id || null,
       job_type_id: locationTracksJobs ? jobId || null : null,
     }
@@ -220,26 +221,53 @@ export default function AddShiftModal({
     }
   }
 
-  return (
+  // --- Render via portal so it sits above the TabBar and page stack ---
+  return createPortal(
     <div
       className="modal-backdrop"
       onClick={() => {
         onClose()
         setTipOutDirty(false)
       }}
+      style={{
+        // belt-and-suspenders in case older rules win the cascade
+        position: 'fixed',
+        inset: 0,
+        height: '100dvh',
+        zIndex: 10000,
+        background: 'rgba(0,0,0,.45)',
+        display: 'grid',
+        placeItems: 'center',
+        isolation: 'isolate',
+      }}
     >
       <div
         className="modal-card"
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: 'min(640px, calc(100vw - 32px))',
-          maxHeight: '90vh',
+          position: 'fixed',
+          zIndex: 10001,
+          maxWidth: 640,
+          width: 'calc(100vw - 32px)',
+          maxHeight: 'calc(100dvh - 24px)',
           display: 'flex',
           flexDirection: 'column',
-          gap: 16,
+          overflow: 'hidden',
+          background: '#fff',
+          borderRadius: 16,
+          boxShadow: '0 18px 50px rgba(0,0,0,.18)',
         }}
       >
-        <div className="modal-head" style={{ alignItems: 'flex-start' }}>
+        <div
+          className="modal-head"
+          style={{
+            alignItems: 'flex-start',
+            display: 'flex',
+            justifyContent: 'space-between',
+            padding: 16,
+            borderBottom: '1px solid #eee',
+          }}
+        >
           <div className="modal-title">Add shift</div>
           <button
             className="cal-btn"
@@ -248,6 +276,7 @@ export default function AddShiftModal({
               setTipOutDirty(false)
             }}
             aria-label="Close add shift modal"
+            style={{ fontSize: 24, lineHeight: 1, background: 'transparent' }}
           >
             ×
           </button>
@@ -259,7 +288,10 @@ export default function AddShiftModal({
             display: 'grid',
             gap: 20,
             overflowY: 'auto',
-            paddingRight: 4,
+            padding: 16,
+            // leave room for sticky footer + tabbar + safe area
+            paddingBottom:
+              'calc(var(--tabbar-h, 64px) + env(safe-area-inset-bottom, 0px) + 80px)',
           }}
         >
           {/* Shift basics */}
@@ -461,7 +493,7 @@ export default function AddShiftModal({
           </div>
         </div>
 
-        {/* Actions */}
+        {/* Actions (sticky over the body scroll) */}
         <div
           className="modal-actions"
           style={{ justifyContent: 'flex-end', gap: 12, flexWrap: 'wrap' }}
@@ -478,6 +510,7 @@ export default function AddShiftModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    typeof window !== 'undefined' ? document.body : null,
   )
 }

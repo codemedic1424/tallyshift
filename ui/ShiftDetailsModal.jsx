@@ -1,5 +1,6 @@
 // ui/ShiftDetailsModal.jsx
 import { useEffect, useState, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 
 // Parse 'YYYY-MM-DD' as a local date (no UTC shift)
 function parseDateOnlyLocal(s) {
@@ -57,11 +58,11 @@ export default function ShiftDetailsModal({
   const [editTipOutDirty, setEditTipOutDirty] = useState(false)
   const [editNotes, setEditNotes] = useState('')
 
-  // inline delete confirm state (now rendered as a centered overlay)
+  // inline delete confirm
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  // initialize fields when shift changes
+  // init fields
   useEffect(() => {
     if (!shift) return
     setEditDate(String(shift.date))
@@ -74,9 +75,10 @@ export default function ShiftDetailsModal({
     setEditTipOutDirty(false)
     setConfirmingDelete(false)
     setDeleting(false)
+    setEditMode(false)
   }, [shift])
 
-  // auto-calc tip-out like Add modal
+  // auto-calc tip-out
   useEffect(() => {
     if (!editMode) return
     if (editTipOutDirty) return
@@ -116,6 +118,7 @@ export default function ShiftDetailsModal({
     return h > 0 ? net / h : 0
   }, [shift, net])
 
+  // Save/Delete handlers
   async function handleSave() {
     setSaving(true)
     await onSave({
@@ -145,29 +148,81 @@ export default function ShiftDetailsModal({
     }
   }
 
-  return (
+  // Close helpers + accessibility
+  useEffect(() => {
+    if (!shift) return
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        if (confirmingDelete) setConfirmingDelete(false)
+        else {
+          onClose?.()
+          setEditMode(false)
+        }
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [shift, onClose, confirmingDelete])
+
+  // Lock background scroll while open
+  useEffect(() => {
+    if (!shift) return
+    document.body.classList.add('modal-open')
+    return () => document.body.classList.remove('modal-open')
+  }, [shift])
+
+  if (!shift) return null
+
+  return createPortal(
     <div
       className="modal-backdrop"
       onClick={() => {
-        onClose()
+        onClose?.()
         setEditMode(false)
         setConfirmingDelete(false)
+      }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        height: '100dvh',
+        zIndex: 10000,
+        background: 'rgba(0,0,0,.45)',
+        display: 'grid',
+        placeItems: 'center',
+        isolation: 'isolate',
       }}
     >
       <div
         className="modal-card"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="shift-details-title"
         style={{
-          width: 'min(640px, calc(100vw - 32px))',
-          maxHeight: '90vh',
+          position: 'fixed',
+          zIndex: 10001,
+          maxWidth: 640,
+          width: 'calc(100vw - 32px)',
+          maxHeight: 'calc(100dvh - 24px)',
           display: 'flex',
           flexDirection: 'column',
-          gap: 16,
           overflow: 'hidden',
+          background: '#fff',
+          borderRadius: 16,
+          boxShadow: '0 18px 50px rgba(0,0,0,.18)',
         }}
       >
-        <div className="modal-head">
-          <div className="modal-title">
+        <div
+          className="modal-head"
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: 16,
+            borderBottom: '1px solid #eee',
+          }}
+        >
+          <div className="modal-title" id="shift-details-title">
             {editMode
               ? 'Edit shift'
               : parseDateOnlyLocal(shift.date).toLocaleDateString()}
@@ -175,7 +230,7 @@ export default function ShiftDetailsModal({
           <button
             className="cal-btn"
             onClick={() => {
-              onClose()
+              onClose?.()
               setEditMode(false)
               setConfirmingDelete(false)
             }}
@@ -188,7 +243,18 @@ export default function ShiftDetailsModal({
         {!editMode ? (
           <>
             {/* VIEW MODE */}
-            <div className="modal-body" style={{ overflowY: 'auto' }}>
+            <div
+              className="modal-body"
+              style={{
+                flex: 1,
+                minHeight: 0,
+                overflowY: 'auto',
+                WebkitOverflowScrolling: 'touch',
+                overscrollBehavior: 'contain',
+                padding: 16,
+                paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+              }}
+            >
               <div className="modal-row">
                 <span>Hours</span>
                 <b>{Number(shift.hours || 0).toFixed(2)}</b>
@@ -258,10 +324,16 @@ export default function ShiftDetailsModal({
             <div
               className="modal-body"
               style={{
+                flex: 1,
+                minHeight: 0,
+                WebkitOverflowScrolling: 'touch',
+                overscrollBehavior: 'contain',
                 display: 'grid',
                 gap: 16,
                 overflowY: 'auto',
+                padding: 16,
                 paddingRight: 4,
+                paddingBottom: 'env(safe-area-inset-bottom, 0px)',
               }}
             >
               <label className="field">
@@ -378,6 +450,7 @@ export default function ShiftDetailsModal({
                 />
               </label>
             </div>
+
             <div
               className="modal-actions"
               style={{ justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}
@@ -401,7 +474,7 @@ export default function ShiftDetailsModal({
         )}
       </div>
 
-      {/* Centered confirmation overlay */}
+      {/* Centered confirmation overlay above the card */}
       {confirmingDelete && (
         <div
           onClick={() => setConfirmingDelete(false)}
@@ -412,7 +485,7 @@ export default function ShiftDetailsModal({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 1000,
+            zIndex: 10002, // above card (10001)
             padding: 16,
           }}
         >
@@ -421,11 +494,10 @@ export default function ShiftDetailsModal({
             onClick={(e) => e.stopPropagation()}
             style={{
               width: 'min(420px, 100%)',
-              maxWidth: '100%',
               display: 'grid',
               gap: 12,
-              background: 'var(--card)',
-              border: '1px solid var(--card-border)',
+              background: 'var(--card,#fff)',
+              border: '1px solid var(--border,#e5e7eb)',
               padding: 16,
               borderRadius: 12,
               boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
@@ -464,6 +536,7 @@ export default function ShiftDetailsModal({
           </div>
         </div>
       )}
-    </div>
+    </div>,
+    document.body,
   )
 }

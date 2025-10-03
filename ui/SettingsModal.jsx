@@ -1,14 +1,13 @@
 // ui/SettingsModal.jsx
 import { useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import SettingsPanel from './SettingsPanel'
 
-// tiny helper to show a toast without any global provider
 function showToast(message = 'Saved', duration = 2200) {
   const el = document.createElement('div')
   el.className = 'toast toast-success'
   el.textContent = message
   document.body.appendChild(el)
-  // force reflow for transition
   window.getComputedStyle(el).opacity
   el.classList.add('show')
   setTimeout(() => {
@@ -21,7 +20,6 @@ export default function SettingsModal({ open, onClose }) {
   const [dirty, setDirty] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
 
-  // Attempt close: if dirty, show confirm
   const attemptClose = useCallback(() => {
     if (dirty) {
       setConfirmOpen(true)
@@ -30,10 +28,9 @@ export default function SettingsModal({ open, onClose }) {
     onClose?.()
   }, [dirty, onClose])
 
-  // close on ESC (but respect confirm)
   useEffect(() => {
     if (!open) return
-    function onKey(e) {
+    const onKey = (e) => {
       if (e.key === 'Escape') {
         if (confirmOpen) setConfirmOpen(false)
         else attemptClose()
@@ -43,10 +40,29 @@ export default function SettingsModal({ open, onClose }) {
     return () => document.removeEventListener('keydown', onKey)
   }, [open, attemptClose, confirmOpen])
 
+  useEffect(() => {
+    if (!open) return
+    document.body.classList.add('modal-open')
+    return () => document.body.classList.remove('modal-open')
+  }, [open])
+
   if (!open) return null
 
-  return (
-    <div className="modal-backdrop" onClick={attemptClose}>
+  return createPortal(
+    <div
+      className="modal-backdrop"
+      onClick={attemptClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        height: '100dvh',
+        zIndex: 10000,
+        background: 'rgba(0,0,0,.45)',
+        display: 'grid',
+        placeItems: 'center',
+        isolation: 'isolate',
+      }}
+    >
       <div
         className="modal-card"
         role="dialog"
@@ -54,23 +70,28 @@ export default function SettingsModal({ open, onClose }) {
         aria-labelledby="settings-modal-title"
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: '100%',
-          maxWidth: 520,
-          maxHeight: '90vh',
-          overflow: 'auto',
+          position: 'fixed',
+          zIndex: 10001,
+          maxWidth: 640,
+          width: 'calc(100vw - 32px)',
+          maxHeight: 'calc(100dvh - 24px)',
           display: 'flex',
-          flexDirection: 'column',
-          gap: 0,
+          flexDirection: 'column', // footer sits at the bottom of the card
+          overflow: 'hidden',
+          background: '#fff',
+          borderRadius: 16,
+          boxShadow: '0 18px 50px rgba(0,0,0,.18)',
         }}
       >
         {/* Header */}
         <div
           className="modal-head"
           style={{
-            position: 'sticky',
-            top: 0,
-            background: 'var(--card,#fff)',
-            zIndex: 1,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            padding: 16,
+            borderBottom: '1px solid #eee',
           }}
         >
           <div className="modal-title" id="settings-modal-title">
@@ -86,13 +107,21 @@ export default function SettingsModal({ open, onClose }) {
           </button>
         </div>
 
-        {/* Body */}
-        <div className="modal-body" style={{ paddingBottom: 0 }}>
+        {/* Body: the ONLY scroller; no extra bottom padding */}
+        <div
+          className="modal-body"
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            padding: 16,
+            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          }}
+        >
           <SettingsPanel
             onDirtyChange={setDirty}
             onRequestClose={attemptClose}
             onSaved={() => {
-              // show toast and close
               showToast('Settings saved successfully')
               setDirty(false)
               onClose?.()
@@ -100,13 +129,15 @@ export default function SettingsModal({ open, onClose }) {
           />
         </div>
 
-        {/* Unsaved changes confirm */}
+        {/* Inline confirm above card content */}
         {confirmOpen && (
           <div
             className="modal-inline-confirm"
             role="dialog"
             aria-modal="true"
             aria-label="Unsaved changes"
+            style={{ zIndex: 10002 }}
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="confirm-card">
               <div className="h2" style={{ marginBottom: 6 }}>
@@ -139,6 +170,7 @@ export default function SettingsModal({ open, onClose }) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
