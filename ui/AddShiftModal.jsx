@@ -17,14 +17,29 @@ export default function AddShiftModal({
   initialDate, // 'YYYY-MM-DD'
   onClose, // () => void
   onSave, // (payload) => Promise<void>
-  currencyFormatter, // Intl.NumberFormat
-  currencySymbol, // string (e.g. "$")
-  tipsOnPaycheck, // boolean
-  showCashInput, // boolean
-  showCardInput, // boolean
+  currencyFormatter, // Intl.NumberFormat (optional)
+  currencySymbol = '$', // string
+  tipsOnPaycheck, // boolean (optional)
+  showCashInput, // boolean (optional)
+  showCardInput, // boolean (optional)
   defaultTipoutPct, // number | null
 }) {
   const { settings } = useSettings()
+
+  // ----- derive payout display from settings if props aren't provided -----
+  const payoutMode = settings?.payout_mode ?? 'both'
+  const tipsOnPaycheckEff =
+    typeof tipsOnPaycheck === 'boolean'
+      ? tipsOnPaycheck
+      : payoutMode === 'on_paycheck'
+  const showCashInputEff =
+    typeof showCashInput === 'boolean'
+      ? showCashInput
+      : payoutMode === 'both' || payoutMode === 'cash_only'
+  const showCardInputEff =
+    typeof showCardInput === 'boolean'
+      ? showCardInput
+      : payoutMode === 'both' || payoutMode === 'card_only'
 
   const [saving, setSaving] = useState(false)
 
@@ -82,7 +97,7 @@ export default function AddShiftModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locationTracksJobs, currentLocation?.id, activeJobsForLocation.length])
 
-  // reset form on open
+  // reset form when opening (only depends on `open`)
   useEffect(() => {
     if (!open) return
     setDate(initialDate || isoDate(new Date()))
@@ -95,13 +110,10 @@ export default function AddShiftModal({
     setTipOutDirty(false)
     setLocationId(defaultLocationId || null)
     setJobId(null)
-  }, [open, initialDate, defaultLocationId])
-
-  // lock background scroll while modal is open (your CSS supports body.modal-open)
-  useEffect(() => {
-    if (!open) return
+    // lock background scroll
     document.body.classList.add('modal-open')
     return () => document.body.classList.remove('modal-open')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   // helpers
@@ -126,6 +138,7 @@ export default function AddShiftModal({
     if (!val) return ''
     const n = Number(val)
     if (Number.isNaN(n)) return ''
+    // IMPORTANT: no quarter-hour snapping; just normalize to 2 decimals
     return n.toFixed(2)
   }
 
@@ -134,9 +147,9 @@ export default function AddShiftModal({
     if (!open) return
     if (tipOutDirty) return
     if (defaultTipoutPct == null) return
-    if (tipsOnPaycheck) return
-    const cashV = showCashInput ? Number(formatCurrencyValue(cash) || 0) : 0
-    const cardV = showCardInput ? Number(formatCurrencyValue(card) || 0) : 0
+    if (tipsOnPaycheckEff) return
+    const cashV = showCashInputEff ? Number(formatCurrencyValue(cash) || 0) : 0
+    const cardV = showCardInputEff ? Number(formatCurrencyValue(card) || 0) : 0
     const totalTips = cashV + cardV
     if (totalTips <= 0) {
       if (tipOut !== '') setTipOut('')
@@ -152,9 +165,9 @@ export default function AddShiftModal({
     tipOut,
     tipOutDirty,
     defaultTipoutPct,
-    tipsOnPaycheck,
-    showCashInput,
-    showCardInput,
+    tipsOnPaycheckEff,
+    showCashInputEff,
+    showCardInputEff,
   ])
 
   const renderCurrencyInput = (
@@ -201,11 +214,11 @@ export default function AddShiftModal({
         ? Number(formatCurrencyValue(sales) || 0)
         : 0,
       cash_tips:
-        !tipsOnPaycheck && showCashInput
+        !tipsOnPaycheckEff && showCashInputEff
           ? Number(formatCurrencyValue(cash) || 0)
           : 0,
       card_tips:
-        !tipsOnPaycheck && showCardInput
+        !tipsOnPaycheckEff && showCardInputEff
           ? Number(formatCurrencyValue(card) || 0)
           : 0,
       tip_out_total: Number(formatCurrencyValue(tipOut) || 0),
@@ -215,26 +228,25 @@ export default function AddShiftModal({
     }
     try {
       await onSave(payload)
-      onClose()
+      onClose?.()
     } finally {
       setSaving(false)
     }
   }
 
-  // --- Render via portal so it sits above the TabBar and page stack ---
+  // ---------- Render (portal) ----------
   return createPortal(
     <div
       className="modal-backdrop"
       onClick={() => {
-        onClose()
+        onClose?.()
         setTipOutDirty(false)
       }}
       style={{
-        // belt-and-suspenders in case older rules win the cascade
         position: 'fixed',
         inset: 0,
         height: '100dvh',
-        zIndex: 10000,
+        zIndex: 10000, // must be above .tabbar z-index
         background: 'rgba(0,0,0,.45)',
         display: 'grid',
         placeItems: 'center',
@@ -247,8 +259,8 @@ export default function AddShiftModal({
         style={{
           position: 'fixed',
           zIndex: 10001,
-          maxWidth: 640,
           width: 'calc(100vw - 32px)',
+          maxWidth: 640,
           maxHeight: 'calc(100dvh - 24px)',
           display: 'flex',
           flexDirection: 'column',
@@ -258,12 +270,13 @@ export default function AddShiftModal({
           boxShadow: '0 18px 50px rgba(0,0,0,.18)',
         }}
       >
+        {/* Header */}
         <div
           className="modal-head"
           style={{
-            alignItems: 'flex-start',
             display: 'flex',
             justifyContent: 'space-between',
+            alignItems: 'flex-start',
             padding: 16,
             borderBottom: '1px solid #eee',
           }}
@@ -272,7 +285,7 @@ export default function AddShiftModal({
           <button
             className="cal-btn"
             onClick={() => {
-              onClose()
+              onClose?.()
               setTipOutDirty(false)
             }}
             aria-label="Close add shift modal"
@@ -282,14 +295,19 @@ export default function AddShiftModal({
           </button>
         </div>
 
+        {/* Scrollable Body */}
         <div
           className="modal-body"
           style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            WebkitOverflowScrolling: 'touch',
+            overscrollBehavior: 'contain',
             display: 'grid',
             gap: 20,
-            overflowY: 'auto',
             padding: 16,
-            // leave room for sticky footer + tabbar + safe area
+            // leave room for sticky actions + tab bar + device safe area
             paddingBottom:
               'calc(var(--tabbar-h, 64px) + env(safe-area-inset-bottom, 0px) + 80px)',
           }}
@@ -320,7 +338,7 @@ export default function AddShiftModal({
                 />
               </label>
 
-              {/* Location (read-only when multi is off; select when on) */}
+              {/* Location */}
               <label className="field">
                 <span className="field-label">Location</span>
                 {multipleLocations ? (
@@ -371,7 +389,7 @@ export default function AddShiftModal({
                 </label>
               )}
 
-              {/* Hours (respect setting) */}
+              {/* Hours */}
               {settings?.track_hours && (
                 <label className="field">
                   <span className="field-label">Hours worked</span>
@@ -391,7 +409,7 @@ export default function AddShiftModal({
             </div>
           </div>
 
-          {/* Sales & tips (respect Track Sales) */}
+          {/* Sales & tips */}
           <div style={{ display: 'grid', gap: 12 }}>
             <div
               className="note"
@@ -417,9 +435,9 @@ export default function AddShiftModal({
                 </label>
               )}
 
-              {!tipsOnPaycheck ? (
+              {!tipsOnPaycheckEff ? (
                 <>
-                  {showCashInput && (
+                  {showCashInputEff && (
                     <label className="field">
                       <span className="field-label">Cash tips</span>
                       {renderCurrencyInput(
@@ -429,7 +447,7 @@ export default function AddShiftModal({
                       )}
                     </label>
                   )}
-                  {showCardInput && (
+                  {showCardInputEff && (
                     <label className="field">
                       <span className="field-label">Card tips</span>
                       {renderCurrencyInput(
@@ -459,7 +477,7 @@ export default function AddShiftModal({
                       prev ? formatCurrencyValue(prev) : '',
                     ),
                 )}
-                {defaultTipoutPct != null && !tipsOnPaycheck && (
+                {defaultTipoutPct != null && !tipsOnPaycheckEff && (
                   <div className="note" style={{ marginTop: 4 }}>
                     Auto-filled at {defaultTipoutPct}% of tips. Adjust if
                     needed.
@@ -493,7 +511,7 @@ export default function AddShiftModal({
           </div>
         </div>
 
-        {/* Actions (sticky over the body scroll) */}
+        {/* Actions */}
         <div
           className="modal-actions"
           style={{ justifyContent: 'flex-end', gap: 12, flexWrap: 'wrap' }}
@@ -511,6 +529,6 @@ export default function AddShiftModal({
         </div>
       </div>
     </div>,
-    typeof window !== 'undefined' ? document.body : null,
+    document.body,
   )
 }
