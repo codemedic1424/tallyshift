@@ -18,6 +18,42 @@ function startOfDay(d) {
   x.setHours(0, 0, 0, 0)
   return x
 }
+// Compact header label for small screens
+function fmtHeaderLabel(view, cursor, weekStart) {
+  const d = startOfDay(cursor)
+  const shortMD = (x) =>
+    x.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  const longFull = (x) => x.toLocaleDateString()
+
+  if (view === 'day') {
+    // Desktop: full date   •  Mobile: "Oct 6"
+    return window.matchMedia?.('(max-width: 640px)').matches
+      ? shortMD(d)
+      : longFull(d)
+  }
+
+  if (view === 'week') {
+    const start = startOfWeek(d, weekStart)
+    const end = addDays(start, 6)
+    const sameMonth =
+      start.getMonth() === end.getMonth() &&
+      start.getFullYear() === end.getFullYear()
+
+    // Desktop: full date range  •  Mobile: "Oct 6–12" or "Sep 29–Oct 5"
+    if (window.matchMedia?.('(max-width: 640px)').matches) {
+      return sameMonth
+        ? `${start.toLocaleDateString(undefined, { month: 'short' })} ${start.getDate()}–${end.getDate()}`
+        : `${shortMD(start)}–${shortMD(end)}`
+    }
+    return `${longFull(start)} ${S.ndash} ${longFull(end)}`
+  }
+
+  // view === 'month'
+  return window.matchMedia?.('(max-width: 640px)').matches
+    ? d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) // "Oct 2025"
+    : fmtMonth(d) // "October 2025"
+}
+
 function addDays(d, n) {
   const x = new Date(d)
   x.setDate(x.getDate() + n)
@@ -317,7 +353,10 @@ export default function CalendarPage({ theme, setTheme }) {
       <div className="container">
         {/* Header */}
         <div className="cal-header">
-          <div className="cal-title">{range.label}</div>
+          <div className="cal-title">
+            {fmtHeaderLabel(view, cursor, weekStartSetting)}
+          </div>
+
           <div className="cal-controls">
             <button className="cal-btn" onClick={() => setCursor(new Date())}>
               Today
@@ -351,24 +390,16 @@ export default function CalendarPage({ theme, setTheme }) {
               ›
             </button>
             <div className="cal-tabs">
-              <button
-                className={`cal-tab ${view === 'day' ? 'active' : ''}`}
-                onClick={() => setView('day')}
+              <select
+                className="cal-select"
+                value={view}
+                onChange={(e) => setView(e.target.value)}
+                aria-label="Change calendar view"
               >
-                Day
-              </button>
-              <button
-                className={`cal-tab ${view === 'week' ? 'active' : ''}`}
-                onClick={() => setView('week')}
-              >
-                Week
-              </button>
-              <button
-                className={`cal-tab ${view === 'month' ? 'active' : ''}`}
-                onClick={() => setView('month')}
-              >
-                Month
-              </button>
+                <option value="day">Day view</option>
+                <option value="week">Week view</option>
+                <option value="month">Month view</option>
+              </select>
             </div>
           </div>
         </div>
@@ -449,7 +480,6 @@ export default function CalendarPage({ theme, setTheme }) {
                 view === 'month'
                   ? date.getDate()
                   : date.toLocaleDateString(undefined, {
-                      weekday: 'short',
                       day: 'numeric',
                     })
               return compactCell(label)
@@ -469,7 +499,19 @@ export default function CalendarPage({ theme, setTheme }) {
                       })}
                     </span>
                   </div>
-                  {shifts.length === 0 && <div className="note">No shifts</div>}
+                  {shifts.length === 0 ? (
+                    <div
+                      className="cal-shift cal-empty"
+                      onClick={() => openAddFor(date)} // open modal for this day
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => e.key === 'Enter' && openAddFor(date)}
+                      aria-label="Add a shift for this day"
+                    >
+                      <div className="note">No shifts yet. Tap to add.</div>
+                    </div>
+                  ) : null}
+
                   {shifts.map((shift) => {
                     const net =
                       Number(shift.cash_tips || 0) +
@@ -707,6 +749,7 @@ export default function CalendarPage({ theme, setTheme }) {
 
       {/* Inline compact styles specific to this page */}
       <style jsx>{`
+        /* === Calendar Grid (compact modes) === */
         :global(.cal-grid.cal-week.compact),
         :global(.cal-grid.cal-month.compact) {
           grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -738,18 +781,84 @@ export default function CalendarPage({ theme, setTheme }) {
         :global(.cal-cell.compact.busy) {
           background: #f9fafb;
         }
+
+        /* Avoid overflow in shift previews */
         :global(.cal-cell),
         :global(.cal-shift),
-        :global(.cal-more) {
-          min-width: 0;
-        }
+        :global(.cal-more),
         :global(.cal-shift > div),
         :global(.cal-shift .note) {
           min-width: 0;
         }
+
+        /* === Controls row: align & unify sizes === */
+        :global(.cal-controls) {
+          display: flex;
+          gap: 6px;
+          align-items: center;
+        }
+
+        :global(.cal-btn),
+        :global(.cal-select) {
+          display: inline-flex;
+          align-items: center;
+          height: 32px; /* same height across buttons & select */
+          padding: 0 10px; /* same horizontal padding */
+          font-size: 12px; /* same text size */
+          line-height: 1;
+          border-radius: 10px;
+          box-sizing: border-box;
+        }
+
+        /* View dropdown (used on all breakpoints) */
+        :global(.cal-tabs) {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        :global(.cal-select) {
+          width: 160px; /* set width; adjust to taste */
+          border: 1px solid var(--border);
+          background: var(--card);
+          color: var(--text);
+          appearance: none;
+          -webkit-appearance: none;
+          padding-right: 28px; /* room for chevrons */
+          background-image:
+            linear-gradient(45deg, transparent 50%, #6b7280 50%),
+            linear-gradient(135deg, #6b7280 50%, transparent 50%);
+          background-position:
+            right 12px center,
+            right 6px center;
+          background-size:
+            6px 6px,
+            6px 6px;
+          background-repeat: no-repeat;
+        }
+        :global(.cal-select:focus) {
+          outline: 2px solid var(--brand);
+          outline-offset: 2px;
+        }
+
+        /* Title & select tweaks on small screens */
         @media (max-width: 640px) {
           :global(.cal-header .cal-title) {
             font-size: 16px;
+          }
+        }
+        @media (max-width: 420px) {
+          :global(.cal-select) {
+            width: 140px;
+          }
+          :global(.cal-shift.cal-empty) {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px;
+            background: #f9fafb;
+            border: 1px dashed var(--border, #e5e7eb);
+            border-radius: 10px;
+            cursor: pointer;
           }
         }
       `}</style>

@@ -106,7 +106,6 @@ export default function Insights() {
     if (tf === TF.THIS_MONTH) {
       const start = firstOfMonth(now)
       const end = lastOfMonth(now)
-      // previous month
       const prevRef = new Date(now.getFullYear(), now.getMonth() - 1, 1)
       const pStart = firstOfMonth(prevRef)
       const pEnd = lastOfMonth(prevRef)
@@ -115,15 +114,12 @@ export default function Insights() {
     if (tf === TF.LAST_3) {
       const end = parseDateOnlyLocal(isoDate(new Date()))
       const start = addDays(end, -89)
-      // previous 90 days
       const pEnd = addDays(start, -1)
       const pStart = addDays(pEnd, -89)
       return { start, end, pStart, pEnd }
     }
-    // YTD
     const end = parseDateOnlyLocal(isoDate(new Date()))
     const start = firstOfYear(end)
-    // last year's YTD to same date
     const lastYear = end.getFullYear() - 1
     const pStart = new Date(lastYear, 0, 1)
     const pEnd = new Date(lastYear, end.getMonth(), end.getDate())
@@ -356,7 +352,6 @@ export default function Insights() {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 7)
 
-  // timeframe label
   const tfLabel =
     timeframe === TF.THIS_MONTH
       ? 'This month'
@@ -407,7 +402,7 @@ export default function Insights() {
 
         {/* KPIs */}
         <div className="three grid" style={{ gap: 12 }}>
-          <div className="card">
+          <div className="card kpi kpi-wide">
             <div className="note">Net tips ({tfLabel})</div>
             <div className="h1">{currencyFormatter.format(curNet)}</div>
             {netDeltaPct != null && (
@@ -420,11 +415,11 @@ export default function Insights() {
               </div>
             )}
           </div>
-          <div className="card">
+          <div className="card kpi">
             <div className="note">Hours ({tfLabel})</div>
             <div className="h1">{curHours.toFixed(1)}</div>
           </div>
-          <div className="card">
+          <div className="card kpi kpi-wide">
             <div className="note">Effective hourly ({tfLabel})</div>
             <div className="h1">{currencyFormatter.format(curEff)} /h</div>
             {effDeltaPct != null && (
@@ -687,7 +682,6 @@ export default function Insights() {
               alert(error.message)
               return
             }
-            // refresh current timeframe after edit
             await fetchRange(timeframe)
             setSelectedShift(data)
           }}
@@ -711,6 +705,49 @@ export default function Insights() {
           defaultTipoutPct={defaultTipoutPct}
         />
       )}
+
+      {/* Inline styles for KPI layout & overflow handling */}
+      <style jsx>{`
+        /* Responsive KPI grid: 3 → 2 → 1 columns */
+        :global(.grid.three) {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+        @media (max-width: 880px) {
+          :global(.grid.three) {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+        @media (max-width: 560px) {
+          :global(.grid.three) {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        /* Prevent text overflow in KPI cards */
+        :global(.card.kpi) {
+          min-width: 0;
+        }
+        :global(.card.kpi .h1),
+        :global(.card.kpi .note) {
+          min-width: 0;
+          overflow-wrap: anywhere;
+          word-break: break-word;
+        }
+
+        /* Make wide KPIs span full row on tighter screens */
+        @media (max-width: 880px) {
+          :global(.card.kpi.kpi-wide) {
+            grid-column: 1 / -1;
+          }
+        }
+
+        /* Smallest phones: slightly reduce big number size */
+        @media (max-width: 380px) {
+          :global(.card.kpi .h1) {
+            font-size: 18px;
+          }
+        }
+      `}</style>
     </div>
   )
 }

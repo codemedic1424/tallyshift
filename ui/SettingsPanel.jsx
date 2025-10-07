@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useUser } from '../lib/useUser'
 import { useSettings } from '../lib/useSettings'
 
-/* ---------------- utils ---------------- */
+/* ---------------- utils (unchanged behavior) ---------------- */
 
 function uid() {
   return Math.random().toString(36).slice(2, 10)
@@ -78,7 +78,154 @@ function initFromSettings(s) {
   return { ...base, locations, default_location_id }
 }
 
-/* --------------- main component --------------- */
+/* ---------------- small UI atoms ---------------- */
+
+function Switch({ checked, onChange, disabled, title }) {
+  return (
+    <button
+      type="button"
+      className={`sw ${checked ? 'on' : ''} ${disabled ? 'dis' : ''}`}
+      onClick={() => !disabled && onChange?.(!checked)}
+      aria-pressed={checked}
+      title={title}
+    >
+      <span className="knob" />
+      <style jsx>{`
+        .sw {
+          width: 42px;
+          height: 24px;
+          border-radius: 999px;
+          border: 1px solid var(--border);
+          background: #f3f4f6;
+          padding: 0;
+          position: relative;
+          cursor: pointer;
+          transition:
+            background 0.15s ease,
+            border-color 0.15s ease;
+        }
+        .sw.on {
+          background: #22c55e;
+          border-color: #16a34a;
+        }
+        .sw.dis {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+        .knob {
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          left: 2px;
+          width: 20px;
+          height: 20px;
+          border-radius: 999px;
+          background: #fff;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+          transition: left 0.18s ease;
+        }
+        .sw.on .knob {
+          left: 20px;
+        }
+      `}</style>
+    </button>
+  )
+}
+
+function Seg({ value, onChange, options, compact = false }) {
+  return (
+    <div className={`seg ${compact ? 'compact' : ''}`}>
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          className={value === opt.value ? 'active' : ''}
+          onClick={() => onChange(opt.value)}
+        >
+          {opt.label}
+        </button>
+      ))}
+      <style jsx>{`
+        .seg {
+          display: grid;
+          grid-auto-flow: column;
+          gap: 6px;
+          padding: 4px;
+          background: #f3f4f6;
+          border: 1px solid var(--border);
+          border-radius: 999px;
+        }
+        .seg.compact {
+          gap: 4px;
+          padding: 3px;
+        }
+        .seg button {
+          border: 0;
+          background: transparent;
+          padding: 8px 12px;
+          border-radius: 999px;
+          font-weight: 700;
+          font-size: 13px;
+          color: #374151;
+          cursor: pointer;
+        }
+        .seg.compact button {
+          padding: 6px 10px;
+          font-size: 12px;
+        }
+        .seg button.active {
+          background: #111827;
+          color: #fff;
+        }
+      `}</style>
+    </div>
+  )
+}
+
+function TinyIconBtn({ label, variant = 'neutral', onClick, disabled }) {
+  return (
+    <button
+      type="button"
+      className={`tib ${variant}`}
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+    >
+      {label}
+      <style jsx>{`
+        .tib {
+          border: 1px solid var(--border);
+          background: #fff;
+          padding: 6px 10px;
+          border-radius: 10px;
+          font-weight: 700;
+          font-size: 12px;
+          cursor: pointer;
+        }
+        .tib:hover {
+          background: #f9fafb;
+        }
+        .tib:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+        .tib.danger {
+          border-color: #fecaca;
+          color: #b91c1c;
+          background: #fff;
+        }
+        .tib.primary {
+          border-color: #bfdbfe;
+          color: #1d4ed8;
+          background: #fff;
+        }
+      `}</style>
+    </button>
+  )
+}
+
+/* ---------------- main component ---------------- */
 
 export default function SettingsPanel({
   onDirtyChange,
@@ -91,8 +238,6 @@ export default function SettingsPanel({
   const [draft, setDraft] = useState(null)
   const [saving, setSaving] = useState(false)
   const [highlightChanges, setHighlightChanges] = useState(false)
-
-  // UI state
   const [showArchivedJobs, setShowArchivedJobs] = useState(false)
 
   useEffect(() => {
@@ -100,6 +245,14 @@ export default function SettingsPanel({
     setDraft(initFromSettings(settings))
     setHighlightChanges(false)
   }, [settings])
+
+  // Fallback default when no settings row exists (but loading finished)
+  useEffect(() => {
+    if (!loading && !settings && !draft) {
+      setDraft(initFromSettings({}))
+      setHighlightChanges(false)
+    }
+  }, [loading, settings, draft])
 
   const original = useMemo(
     () => (settings ? initFromSettings(settings) : null),
@@ -122,11 +275,9 @@ export default function SettingsPanel({
   function setField(key, val) {
     setDraft((d) => ({ ...(d || {}), [key]: val }))
   }
-
   function replaceLocations(newLocs) {
     setDraft((d) => ({ ...(d || {}), locations: newLocs }))
   }
-
   function updateLocation(id, transform) {
     replaceLocations(
       (draft?.locations || []).map((l) =>
@@ -135,7 +286,7 @@ export default function SettingsPanel({
     )
   }
 
-  // ----- Jobs helpers -----
+  // Jobs helpers
   function addJob(locationId) {
     setDraft((d) => ({
       ...d,
@@ -152,7 +303,6 @@ export default function SettingsPanel({
       ),
     }))
   }
-
   function removeJob(locationId, jobId) {
     setDraft((d) => ({
       ...d,
@@ -163,7 +313,6 @@ export default function SettingsPanel({
       ),
     }))
   }
-
   function finalizeNewJob(locationId, jobId, name) {
     setDraft((d) => ({
       ...d,
@@ -179,7 +328,6 @@ export default function SettingsPanel({
       ),
     }))
   }
-
   function updateJob(locationId, jobId, transform) {
     setDraft((d) => ({
       ...d,
@@ -195,12 +343,11 @@ export default function SettingsPanel({
       ),
     }))
   }
-
   function toggleArchiveJob(locationId, jobId) {
     updateJob(locationId, jobId, (j) => ({ ...j, active: !j.active }))
   }
 
-  // ----- Location helpers -----
+  // Location helpers
   function addAdditionalLocation() {
     setField('multiple_locations', true)
     replaceLocations([
@@ -208,7 +355,6 @@ export default function SettingsPanel({
       { id: uid(), name: '', active: true, track_jobs: false, jobs: [] },
     ])
   }
-
   function toggleArchiveLocation(id) {
     updateLocation(id, (l) => ({ ...l, active: !l.active }))
   }
@@ -224,13 +370,11 @@ export default function SettingsPanel({
       return
     }
 
-    // If multi is OFF, force default to primary
     const default_location_id = draft.multiple_locations
       ? (draft.default_location_id ?? (primary ? primary.id : null)) ||
         primary.id
       : primary.id
 
-    // Trim on save; drop truly empty jobs (but keep archived with names)
     const clean = {
       ...draft,
       default_location_id,
@@ -260,7 +404,6 @@ export default function SettingsPanel({
     onRequestClose?.()
     setHighlightChanges(true)
   }
-
   function changed(key) {
     if (!draft || !original) return false
     return JSON.stringify(draft[key]) !== JSON.stringify(original[key])
@@ -273,410 +416,52 @@ export default function SettingsPanel({
   const activeAdditional = additional.filter((l) => l.active)
   const archivedAdditional = additional.filter((l) => !l.active)
 
-  /* ---------- render ---------- */
+  /* ---------- loading / error UI ---------- */
 
-  return (
-    <div className="settings-panel" style={{ display: 'grid', gap: 12 }}>
-      {loading && <div className="card">Loading...</div>}
-      {error && (
+  if (loading || !draft) {
+    return (
+      <div className="settings-panel" style={{ display: 'grid', gap: 12 }}>
+        <div className="card">Loading…</div>
+      </div>
+    )
+  }
+  if (error) {
+    return (
+      <div className="settings-panel" style={{ display: 'grid', gap: 12 }}>
         <div
           className="card"
           style={{ background: '#fee2e2', borderColor: '#fecaca' }}
         >
           Error: {error}
         </div>
-      )}
+      </div>
+    )
+  }
 
-      {!loading && draft && (
-        <>
-          {/* --- Global basics --- */}
-          <div className="card">
-            <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
-              Tip payout
+  /* ---------------- render ---------------- */
+
+  return (
+    <div className="settings-panel" style={{ display: 'grid', gap: 14 }}>
+      {/* Header Bar (slim) */}
+      <div className="card" style={{ padding: 12 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ display: 'grid', gap: 2 }}>
+            <div className="h1" style={{ margin: 0 }}>
+              Settings
             </div>
-            <div className="grid">
-              {[
-                ['both', 'Cash + Card'],
-                ['cash_only', 'Cash only'],
-                ['card_only', 'Card only'],
-                ['on_paycheck', 'All on paycheck'],
-              ].map(([val, label]) => (
-                <label
-                  key={val}
-                  className="radio"
-                  style={{
-                    display: 'flex',
-                    gap: 8,
-                    alignItems: 'center',
-                    padding: '6px 0',
-                    ...(highlightChanges && changed('payout_mode')
-                      ? { outline: '2px solid #fca5a5', outlineOffset: 2 }
-                      : null),
-                  }}
-                >
-                  <input
-                    type="radio"
-                    checked={draft.payout_mode === val}
-                    onChange={() => setField('payout_mode', val)}
-                  />
-                  <span>{label}</span>
-                </label>
-              ))}
-            </div>
-            <div className="note" style={{ marginTop: 6 }}>
-              Controls which inputs you see when logging a shift.
+            <div className="note">
+              Make it yours. These preferences apply across the app.
             </div>
           </div>
-
-          <div className="two grid">
-            <div className="card">
-              <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
-                Currency
-              </div>
-              <select
-                className={`input ${highlightChanges && changed('currency') ? 'field-changed' : ''}`}
-                value={draft.currency}
-                onChange={(e) => setField('currency', e.target.value)}
-              >
-                <option value="USD">USD - $</option>
-                <option value="CAD">CAD - $</option>
-                <option value="EUR">EUR - €</option>
-                <option value="GBP">GBP - £</option>
-                <option value="AUD">AUD - $</option>
-              </select>
-            </div>
-
-            <div className="card">
-              <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
-                Calendar
-              </div>
-              <label className="field" style={{ marginBottom: 6 }}>
-                <span className="field-label">Default view</span>
-                <select
-                  className={`input ${highlightChanges && changed('default_calendar_view') ? 'field-changed' : ''}`}
-                  value={draft.default_calendar_view}
-                  onChange={(e) =>
-                    setField('default_calendar_view', e.target.value)
-                  }
-                >
-                  <option value="day">Day</option>
-                  <option value="week">Week</option>
-                  <option value="month">Month</option>
-                </select>
-              </label>
-              <label className="field">
-                <span className="field-label">Week starts on</span>
-                <select
-                  className={`input ${highlightChanges && changed('week_start') ? 'field-changed' : ''}`}
-                  value={draft.week_start}
-                  onChange={(e) => setField('week_start', e.target.value)}
-                >
-                  <option value="sunday">Sunday</option>
-                  <option value="monday">Monday</option>
-                </select>
-              </label>
-            </div>
-          </div>
-
-          <div className="two grid">
-            <div className="card">
-              <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
-                Default tip-out % (optional)
-              </div>
-              <input
-                className={`input ${highlightChanges && changed('default_tipout_pct') ? 'field-changed' : ''}`}
-                type="number"
-                min="0"
-                max="100"
-                step="0.5"
-                value={draft.default_tipout_pct ?? ''}
-                placeholder="e.g., 3"
-                onChange={(e) => {
-                  const v =
-                    e.target.value === ''
-                      ? null
-                      : Math.max(0, Math.min(100, Number(e.target.value)))
-                  setField('default_tipout_pct', v)
-                }}
-              />
-            </div>
-            <div className="card">
-              <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
-                Shift form basics
-              </div>
-              <label
-                className="checkbox"
-                style={{
-                  display: 'flex',
-                  gap: 8,
-                  alignItems: 'center',
-                  padding: '6px 0',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={!!draft.track_sales}
-                  onChange={(e) => setField('track_sales', e.target.checked)}
-                />
-                <span>Track Sales</span>
-              </label>
-              <label
-                className="checkbox"
-                style={{
-                  display: 'flex',
-                  gap: 8,
-                  alignItems: 'center',
-                  padding: '6px 0',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={!!draft.track_hours}
-                  onChange={(e) => setField('track_hours', e.target.checked)}
-                />
-                <span>Track Hours</span>
-              </label>
-            </div>
-          </div>
-
-          {/* ---------- Section 1: Primary Location ---------- */}
-          <div className="card">
-            <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
-              Primary location (required)
-            </div>
-
-            <label className="field" style={{ marginBottom: 8 }}>
-              <span className="field-label">Location name</span>
-              <input
-                className="input"
-                value={primary?.name || ''}
-                onChange={(e) =>
-                  updateLocation(primary.id, (l) => ({
-                    ...l,
-                    name: e.target.value,
-                  }))
-                }
-                placeholder="e.g., Boardwalk Billy’s"
-              />
-            </label>
-
-            <label
-              className="checkbox"
-              style={{
-                display: 'flex',
-                gap: 8,
-                alignItems: 'center',
-                marginBottom: 8,
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={!!primary?.track_jobs}
-                onChange={(e) =>
-                  updateLocation(primary.id, (l) => ({
-                    ...l,
-                    track_jobs: e.target.checked,
-                  }))
-                }
-              />
-              <span>Track jobs at this location?</span>
-            </label>
-
-            {primary?.track_jobs && (
-              <>
-                <div
-                  className="note"
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
-                >
-                  <span>Jobs</span>
-                  <div
-                    style={{ display: 'flex', gap: 10, alignItems: 'center' }}
-                  >
-                    <label
-                      className="checkbox"
-                      style={{ display: 'flex', gap: 6, alignItems: 'center' }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={showArchivedJobs}
-                        onChange={(e) => setShowArchivedJobs(e.target.checked)}
-                      />
-                      <span>Show archived</span>
-                    </label>
-                    <button
-                      className="btn"
-                      type="button"
-                      onClick={() => addJob(primary.id)}
-                    >
-                      + Add job
-                    </button>
-                  </div>
-                </div>
-
-                <JobsList
-                  jobs={primary.jobs || []}
-                  readOnly={false}
-                  showArchived={showArchivedJobs}
-                  onChangeName={(jobId, name) =>
-                    updateJob(primary.id, jobId, (j) => ({ ...j, name }))
-                  }
-                  onArchive={(jobId) => toggleArchiveJob(primary.id, jobId)}
-                  onUnarchive={(jobId) => toggleArchiveJob(primary.id, jobId)}
-                  onRemoveNew={(jobId) => removeJob(primary.id, jobId)}
-                  onFinalizeNew={(jobId, name) =>
-                    finalizeNewJob(primary.id, jobId, name)
-                  }
-                />
-              </>
-            )}
-          </div>
-
-          {/* ---------- Section 2: Multiple Locations ---------- */}
-          <div className="card">
-            <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
-              Multiple locations
-            </div>
-
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                background: 'var(--muted-bg, #f8fafc)',
-                border: '1px solid var(--card-border, #e5e7eb)',
-                borderRadius: 10,
-                padding: 12,
-                gap: 12,
-                flexWrap: 'wrap',
-              }}
-            >
-              <div style={{ display: 'grid', gap: 4 }}>
-                <div style={{ fontWeight: 600 }}>Track multiple locations?</div>
-                <div className="note">
-                  Turn on to add additional locations. You can choose a default
-                  only when this is enabled.
-                </div>
-              </div>
-              <label
-                className="checkbox"
-                style={{ display: 'flex', gap: 8, alignItems: 'center' }}
-              >
-                <input
-                  type="checkbox"
-                  checked={!!draft.multiple_locations}
-                  onChange={(e) =>
-                    setField('multiple_locations', e.target.checked)
-                  }
-                />
-                <span>{draft.multiple_locations ? 'On' : 'Off'}</span>
-              </label>
-            </div>
-
-            {draft.multiple_locations && (
-              <div style={{ display: 'grid', gap: 12, marginTop: 12 }}>
-                {/* Default location (only when multi is ON) */}
-                <label className="field">
-                  <span className="field-label">Default location</span>
-                  <select
-                    className={`input ${highlightChanges && changed('default_location_id') ? 'field-changed' : ''}`}
-                    value={
-                      (draft.default_location_id ??
-                        (primary ? primary.id : '')) ||
-                      ''
-                    }
-                    onChange={(e) =>
-                      setField(
-                        'default_location_id',
-                        e.target.value || (primary ? primary.id : ''),
-                      )
-                    }
-                  >
-                    {(draft.locations || [])
-                      .filter((l) => l.active)
-                      .map((l) => (
-                        <option key={l.id} value={l.id}>
-                          {l.name || '(untitled)'}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-
-                {/* Add / list */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button
-                    className="btn"
-                    type="button"
-                    onClick={addAdditionalLocation}
-                  >
-                    + Add location
-                  </button>
-                </div>
-
-                {activeAdditional.length === 0 &&
-                  archivedAdditional.length === 0 && (
-                    <div className="note">No additional locations yet.</div>
-                  )}
-
-                {/* Active additional locations (editable) */}
-                {activeAdditional.map((loc) => (
-                  <AdditionalLocationCard
-                    key={loc.id}
-                    loc={loc}
-                    readOnly={false}
-                    showArchivedJobs={showArchivedJobs}
-                    onChangeName={(v) =>
-                      updateLocation(loc.id, (l) => ({ ...l, name: v }))
-                    }
-                    onToggleTrackJobs={(v) =>
-                      updateLocation(loc.id, (l) => ({ ...l, track_jobs: v }))
-                    }
-                    onToggleArchive={() => toggleArchiveLocation(loc.id)}
-                    onAddJob={() => addJob(loc.id)}
-                    onChangeJob={(jobId, name) =>
-                      updateJob(loc.id, jobId, (j) => ({ ...j, name }))
-                    }
-                    onArchiveJob={(jobId) => toggleArchiveJob(loc.id, jobId)}
-                    onRemoveNewJob={(jobId) => removeJob(loc.id, jobId)}
-                    onFinalizeNewJob={(jobId, name) =>
-                      finalizeNewJob(loc.id, jobId, name)
-                    }
-                  />
-                ))}
-
-                {/* Archived additional locations (read-only; unarchive only) */}
-                {archivedAdditional.length > 0 && (
-                  <>
-                    <div className="note" style={{ marginTop: 4 }}>
-                      Archived locations
-                    </div>
-                    {archivedAdditional.map((loc) => (
-                      <AdditionalLocationCard
-                        key={loc.id}
-                        loc={loc}
-                        readOnly={true}
-                        showArchivedJobs={true}
-                        onChangeName={() => {}}
-                        onToggleTrackJobs={() => {}}
-                        onToggleArchive={() => toggleArchiveLocation(loc.id)} // Unarchive allowed
-                        onAddJob={() => {}}
-                        onChangeJob={() => {}}
-                        onArchiveJob={() => {}}
-                        onRemoveNewJob={() => {}}
-                        onFinalizeNewJob={() => {}}
-                      />
-                    ))}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Actions */}
-          <div className="settings-actions">
+          <div style={{ display: 'flex', gap: 8 }}>
             <button
               className="btn secondary"
               type="button"
@@ -693,116 +478,551 @@ export default function SettingsPanel({
               {saving ? 'Saving…' : 'Save'}
             </button>
           </div>
-        </>
-      )}
+        </div>
+      </div>
+
+      {/* --- First Impression: Locations --- */}
+      <div className="card" style={{ padding: 12 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 10,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div className="h2" style={{ margin: 0, fontSize: 16 }}>
+            Locations
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className="note">Show archived jobs</div>
+            <Switch checked={showArchivedJobs} onChange={setShowArchivedJobs} />
+          </div>
+        </div>
+
+        {/* Primary location row */}
+        <LocationRow
+          label="Primary"
+          loc={primary}
+          isDefault={draft.default_location_id === primary.id}
+          disabled={false}
+          showArchivedJobs={showArchivedJobs}
+          highlightMissingName={
+            highlightChanges && !String(primary?.name || '').trim()
+          }
+          onChangeName={(v) =>
+            updateLocation(primary.id, (l) => ({ ...l, name: v }))
+          }
+          onToggleTrackJobs={(v) =>
+            updateLocation(primary.id, (l) => ({ ...l, track_jobs: v }))
+          }
+          onAddJob={() => addJob(primary.id)}
+          onChangeJob={(jobId, name) =>
+            updateJob(primary.id, jobId, (j) => ({ ...j, name }))
+          }
+          onArchiveJob={(jobId) => toggleArchiveJob(primary.id, jobId)}
+          onRemoveNewJob={(jobId) => removeJob(primary.id, jobId)}
+          onFinalizeNewJob={(jobId, name) =>
+            finalizeNewJob(primary.id, jobId, name)
+          }
+        />
+
+        {/* Multi-locations toggle + default selector */}
+        <div className="card" style={{ marginTop: 10, padding: 10 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr auto',
+              alignItems: 'center',
+              gap: 12,
+            }}
+          >
+            <div style={{ display: 'grid', gap: 4 }}>
+              <div style={{ fontWeight: 700 }}>Track multiple locations?</div>
+              <div className="note">
+                Enable to add more locations and pick a default.
+              </div>
+            </div>
+            <Switch
+              checked={!!draft.multiple_locations}
+              onChange={(v) => setField('multiple_locations', v)}
+              title="Multiple locations"
+            />
+          </div>
+
+          {draft.multiple_locations && (
+            <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+              <label className="field" style={{ maxWidth: 360 }}>
+                <span className="field-label">Default location</span>
+                <select
+                  className={`input ${highlightChanges && changed('default_location_id') ? 'field-changed' : ''}`}
+                  value={
+                    (draft.default_location_id ??
+                      (primary ? primary.id : '')) ||
+                    ''
+                  }
+                  onChange={(e) =>
+                    setField(
+                      'default_location_id',
+                      e.target.value || (primary ? primary.id : ''),
+                    )
+                  }
+                >
+                  {(draft.locations || [])
+                    .filter((l) => l.active)
+                    .map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name || '(untitled)'}
+                      </option>
+                    ))}
+                </select>
+              </label>
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <TinyIconBtn
+                  label="+ Add location"
+                  variant="primary"
+                  onClick={addAdditionalLocation}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Additional (active) */}
+        {draft.multiple_locations && activeAdditional.length > 0 && (
+          <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
+            {activeAdditional.map((loc) => (
+              <LocationRow
+                key={loc.id}
+                label="Location"
+                loc={loc}
+                disabled={false}
+                showArchivedJobs={showArchivedJobs}
+                isDefault={draft.default_location_id === loc.id}
+                onMakeDefault={() => setField('default_location_id', loc.id)}
+                onChangeName={(v) =>
+                  updateLocation(loc.id, (l) => ({ ...l, name: v }))
+                }
+                onToggleTrackJobs={(v) =>
+                  updateLocation(loc.id, (l) => ({ ...l, track_jobs: v }))
+                }
+                onToggleArchive={() => toggleArchiveLocation(loc.id)}
+                onAddJob={() => addJob(loc.id)}
+                onChangeJob={(jobId, name) =>
+                  updateJob(loc.id, jobId, (j) => ({ ...j, name }))
+                }
+                onArchiveJob={(jobId) => toggleArchiveJob(loc.id, jobId)}
+                onRemoveNewJob={(jobId) => removeJob(loc.id, jobId)}
+                onFinalizeNewJob={(jobId, name) =>
+                  finalizeNewJob(loc.id, jobId, name)
+                }
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Archived locations */}
+        {draft.multiple_locations && archivedAdditional.length > 0 && (
+          <div className="card" style={{ marginTop: 12, padding: 10 }}>
+            <div className="note" style={{ marginBottom: 6 }}>
+              Archived locations
+            </div>
+            <div style={{ display: 'grid', gap: 8 }}>
+              {archivedAdditional.map((loc) => (
+                <LocationRow
+                  key={loc.id}
+                  label="Location (archived)"
+                  loc={loc}
+                  disabled
+                  archived
+                  showArchivedJobs
+                  onToggleArchive={() => toggleArchiveLocation(loc.id)} // Unarchive
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* --- Payout (compact segmented) --- */}
+      <div className="card" style={{ padding: 12 }}>
+        <div
+          className="h2"
+          style={{ margin: 0, fontSize: 16, marginBottom: 8 }}
+        >
+          Tip payout
+        </div>
+        <Seg
+          value={draft.payout_mode}
+          onChange={(v) => setField('payout_mode', v)}
+          options={[
+            { value: 'both', label: 'Cash + Card' },
+            { value: 'cash_only', label: 'Cash only' },
+            { value: 'card_only', label: 'Card only' },
+            { value: 'on_paycheck', label: 'On paycheck' },
+          ]}
+          compact
+        />
+        <div className="note" style={{ marginTop: 6 }}>
+          Controls which inputs you see when logging a shift.
+        </div>
+      </div>
+
+      {/* --- Calendar & Form in a clean two-up --- */}
+      <div className="two grid" style={{ gap: 12 }}>
+        <div className="card" style={{ padding: 12 }}>
+          <div
+            className="h2"
+            style={{ margin: 0, fontSize: 16, marginBottom: 8 }}
+          >
+            Calendar
+          </div>
+          <div className="two grid" style={{ gap: 10 }}>
+            <label className="field">
+              <span className="field-label">Default view</span>
+              <select
+                className={`input ${highlightChanges && changed('default_calendar_view') ? 'field-changed' : ''}`}
+                value={draft.default_calendar_view}
+                onChange={(e) =>
+                  setField('default_calendar_view', e.target.value)
+                }
+              >
+                <option value="day">Day</option>
+                <option value="week">Week</option>
+                <option value="month">Month</option>
+              </select>
+            </label>
+            <label className="field">
+              <span className="field-label">Week starts on</span>
+              <select
+                className={`input ${highlightChanges && changed('week_start') ? 'field-changed' : ''}`}
+                value={draft.week_start}
+                onChange={(e) => setField('week_start', e.target.value)}
+              >
+                <option value="sunday">Sunday</option>
+                <option value="monday">Monday</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        <div className="card" style={{ padding: 12 }}>
+          <div
+            className="h2"
+            style={{ margin: 0, fontSize: 16, marginBottom: 8 }}
+          >
+            Shift form
+          </div>
+          <div style={{ display: 'grid', gap: 10 }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr auto',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <div>Track Sales</div>
+              <Switch
+                checked={!!draft.track_sales}
+                onChange={(v) => setField('track_sales', v)}
+              />
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr auto',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <div>Track Hours</div>
+              <Switch
+                checked={!!draft.track_hours}
+                onChange={(v) => setField('track_hours', v)}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* --- Advanced --- */}
+      <div className="card" style={{ padding: 12 }}>
+        <div
+          className="h2"
+          style={{ margin: 0, fontSize: 16, marginBottom: 8 }}
+        >
+          Advanced
+        </div>
+        <div className="two grid" style={{ gap: 10 }}>
+          <label className="field">
+            <span className="field-label">Currency</span>
+            <select
+              className={`input ${highlightChanges && changed('currency') ? 'field-changed' : ''}`}
+              value={draft.currency}
+              onChange={(e) => setField('currency', e.target.value)}
+            >
+              <option value="USD">USD - $</option>
+              <option value="CAD">CAD - $</option>
+              <option value="EUR">EUR - €</option>
+              <option value="GBP">GBP - £</option>
+              <option value="AUD">AUD - $</option>
+            </select>
+          </label>
+          <label className="field">
+            <span className="field-label">Default tip-out % (optional)</span>
+            <input
+              className={`input ${highlightChanges && changed('default_tipout_pct') ? 'field-changed' : ''}`}
+              type="number"
+              min="0"
+              max="100"
+              step="0.5"
+              value={draft.default_tipout_pct ?? ''}
+              placeholder="e.g., 3"
+              onChange={(e) => {
+                const v =
+                  e.target.value === ''
+                    ? null
+                    : Math.max(0, Math.min(100, Number(e.target.value)))
+                setField('default_tipout_pct', v)
+              }}
+            />
+          </label>
+        </div>
+      </div>
+
+      {/* Sticky actions (bottom) */}
+      <div className="settings-actions">
+        <button className="btn secondary" type="button" onClick={handleCancel}>
+          Cancel
+        </button>
+        <button
+          className="btn btn-primary"
+          type="button"
+          onClick={handleSave}
+          disabled={!isDirty || saving}
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
     </div>
   )
 }
 
-/* --------------- subcomponents --------------- */
+/* ---------------- location row + jobs ---------------- */
 
-function AdditionalLocationCard({
+function LocationRow({
+  label,
   loc,
-  readOnly,
+  isDefault,
+  archived,
+  disabled,
   showArchivedJobs,
+  highlightMissingName,
   onChangeName,
   onToggleTrackJobs,
   onToggleArchive,
+  onMakeDefault,
   onAddJob,
   onChangeJob,
   onArchiveJob,
   onRemoveNewJob,
   onFinalizeNewJob,
 }) {
-  const isArchived = !loc.active
-  const disabled = readOnly || isArchived
+  const pending = (loc.jobs || []).filter((j) => j._isNew)
+  const active = (loc.jobs || []).filter((j) => j.active && !j._isNew)
+  const archivedJobs = (loc.jobs || []).filter((j) => !j.active)
 
   return (
-    <div className="card" style={{ padding: 10, opacity: disabled ? 0.65 : 1 }}>
-      <div style={{ display: 'grid', gap: 8 }}>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+    <div className="locrow">
+      {/* left col (name + badges) */}
+      <div className="left">
+        <div className="label">{label}</div>
+        <div className="badges">
+          {isDefault && <span className="badge">Default</span>}
+          {archived && <span className="badge">Archived</span>}
+        </div>
+      </div>
+
+      {/* main content */}
+      <div className="main">
+        <div className="line">
           <input
-            className="input"
+            className={`input ${highlightMissingName ? 'field-changed' : ''}`}
             value={loc.name}
-            onChange={(e) => !disabled && onChangeName(e.target.value)}
+            onChange={(e) => !disabled && onChangeName?.(e.target.value)}
             placeholder="Location name"
             disabled={disabled}
-            style={{ flex: 1, fontSize: 14 }}
+            style={{ maxWidth: 360 }}
           />
-          <button
-            className={isArchived ? 'btn' : 'btn btn-danger'}
-            type="button"
-            onClick={onToggleArchive}
-          >
-            {isArchived ? 'Unarchive' : 'Archive'}
-          </button>
+          <div className="spacer" />
+          {onMakeDefault && !isDefault && !archived && (
+            <TinyIconBtn label="Make default" onClick={onMakeDefault} />
+          )}
+          {onToggleArchive && (
+            <TinyIconBtn
+              label={archived ? 'Unarchive' : 'Archive'}
+              variant={archived ? 'neutral' : 'danger'}
+              onClick={onToggleArchive}
+            />
+          )}
         </div>
 
-        <div
-          style={{
-            display: 'flex',
-            gap: 8,
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <label
-            className="checkbox"
-            style={{ display: 'flex', gap: 8, alignItems: 'center' }}
-          >
-            <input
-              type="checkbox"
-              checked={!!loc.track_jobs}
-              onChange={(e) => !disabled && onToggleTrackJobs(e.target.checked)}
-              disabled={disabled}
-            />
-            <span>Track jobs at this location?</span>
-          </label>
+        <div className="line">
+          <div className="note">Track jobs at this location</div>
+          <Switch
+            checked={!!loc.track_jobs}
+            onChange={(v) => !disabled && onToggleTrackJobs?.(v)}
+            disabled={disabled}
+          />
         </div>
 
         {loc.track_jobs && (
           <>
-            <div
-              className="note"
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-              }}
-            >
-              <span>Jobs</span>
-              {!disabled && (
-                <button className="btn" type="button" onClick={onAddJob}>
-                  + Add job
-                </button>
+            {/* active jobs as compact chips */}
+            {active.length > 0 && (
+              <div className="chips">
+                {active.map((j) => (
+                  <JobChipActive
+                    key={j.id}
+                    job={j}
+                    disabled={disabled}
+                    onChangeName={(name) => onChangeJob?.(j.id, name)}
+                    onArchive={() => onArchiveJob?.(j.id)}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* pending inputs */}
+            {pending.map((j) => (
+              <JobRowNew
+                key={j.id}
+                job={j}
+                allJobs={loc.jobs}
+                disabled={disabled}
+                onCancel={() => onRemoveNewJob?.(j.id)}
+                onUnarchiveExisting={(archivedId) => onArchiveJob?.(archivedId)}
+                onSave={(name) => onFinalizeNewJob?.(j.id, name)}
+              />
+            ))}
+
+            <div className="line">
+              <TinyIconBtn
+                label="+ Add job"
+                variant="primary"
+                onClick={onAddJob}
+                disabled={disabled}
+              />
+              <div className="spacer" />
+              {showArchivedJobs && archivedJobs.length > 0 && (
+                <div className="chips wrap">
+                  {archivedJobs.map((j) => (
+                    <div key={j.id} className="chip strike">
+                      <span title={j.name}>{j.name || '(untitled)'}</span>
+                      {!disabled && (
+                        <TinyIconBtn
+                          label="Unarchive"
+                          onClick={() => onArchiveJob?.(j.id)}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
-
-            <JobsList
-              jobs={loc.jobs || []}
-              readOnly={disabled}
-              showArchived={showArchivedJobs}
-              onChangeName={(jobId, name) => onChangeJob(jobId, name)}
-              onArchive={(jobId) => onArchiveJob(jobId)}
-              onUnarchive={(jobId) => onArchiveJob(jobId)}
-              onRemoveNew={(jobId) => onRemoveNewJob(jobId)}
-              onFinalizeNew={(jobId, name) => onFinalizeNewJob(jobId, name)}
-            />
           </>
         )}
       </div>
+
+      <style jsx>{`
+        .locrow {
+          display: grid;
+          grid-template-columns: 120px 1fr;
+          align-items: start;
+          gap: 12px;
+          padding: 12px;
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          background: #fff;
+          box-shadow: var(--shadow-soft);
+          margin-top: 10px;
+        }
+        @media (max-width: 560px) {
+          .locrow {
+            grid-template-columns: 1fr;
+          }
+        }
+        .left {
+          display: grid;
+          gap: 6px;
+        }
+        .label {
+          font-weight: 800;
+        }
+        .badges {
+          display: flex;
+          gap: 6px;
+          flex-wrap: wrap;
+        }
+        .badge {
+          font-size: 11px;
+          font-weight: 800;
+          padding: 3px 8px;
+          border-radius: 999px;
+          border: 1px solid var(--border);
+          background: var(--bg);
+          color: var(--muted);
+        }
+        .main {
+          display: grid;
+          gap: 10px;
+        }
+        .line {
+          display: grid;
+          grid-template-columns: 1fr auto;
+          align-items: center;
+          gap: 10px;
+        }
+        .spacer {
+          flex: 1;
+        }
+        .chips {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+        }
+        .chips.wrap {
+          flex-wrap: wrap;
+        }
+        .chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 6px 10px;
+          border-radius: 999px;
+          border: 1px solid var(--border);
+          background: #fff;
+          font-size: 13px;
+        }
+        .chip.strike span {
+          text-decoration: line-through;
+          color: #6b7280;
+        }
+      `}</style>
     </div>
   )
 }
 
-/* ---- Jobs UI (with pending-create + duplicate guard) ---- */
+/* ---- jobs UI ---- */
 
 function normName(s) {
   return String(s || '')
     .trim()
     .toLowerCase()
 }
-
 function hasNameConflict(allJobs, candidateName, { excludeJobId } = {}) {
   const n = normName(candidateName)
   if (!n) return { conflict: false, activeMatch: null, archivedMatch: null }
@@ -822,75 +1042,27 @@ function hasNameConflict(allJobs, candidateName, { excludeJobId } = {}) {
   }
 }
 
-function JobsList({
-  jobs,
-  readOnly,
-  showArchived,
-  onChangeName, // (jobId, name)
-  onArchive, // (jobId)
-  onUnarchive, // (jobId)
-  onRemoveNew, // (jobId)
-  onFinalizeNew, // (jobId, name)
-}) {
-  const active = jobs.filter((j) => j.active && !j._isNew)
-  const pending = jobs.filter((j) => j._isNew)
-  const archived = jobs.filter((j) => !j.active)
-
+function JobChipActive({ job, disabled, onChangeName, onArchive }) {
   return (
-    <div style={{ display: 'grid', gap: 10 }}>
-      {/* Pending new jobs (input + Save/Cancel) */}
-      {pending.map((j) => (
-        <JobRowNew
-          key={j.id}
-          job={j}
-          allJobs={jobs}
-          disabled={!!readOnly}
-          onCancel={() => onRemoveNew?.(j.id)}
-          onUnarchiveExisting={(archivedId) => onUnarchive?.(archivedId)}
-          onSave={(name) => onFinalizeNew?.(j.id, name)}
-        />
-      ))}
-
-      {/* Existing active jobs */}
-      {active.map((j) => (
-        <JobRowActive
-          key={j.id}
-          job={j}
-          disabled={!!readOnly}
-          onChangeName={(name) => onChangeName(j.id, name)}
-          onArchive={() => onArchive(j.id)}
-        />
-      ))}
-
-      {/* Archived chips */}
-      {showArchived && archived.length > 0 && (
-        <>
-          <div className="note" style={{ marginTop: 2 }}>
-            Archived jobs
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {archived.map((j) => (
-              <JobChipArchived
-                key={j.id}
-                job={j}
-                onUnarchive={() => onUnarchive(j.id)}
-                disabled={!!readOnly}
-              />
-            ))}
-          </div>
-        </>
-      )}
-
-      {active.length === 0 &&
-        pending.length === 0 &&
-        (!showArchived || archived.length === 0) && (
-          <div className="note">No jobs yet.</div>
-        )}
+    <div className="chip">
+      <input
+        className="input"
+        value={job.name}
+        onChange={(e) => !disabled && onChangeName?.(e.target.value)}
+        placeholder="e.g., Server"
+        disabled={disabled}
+        style={{ padding: '6px 10px', height: 34, fontSize: 13, width: 160 }}
+      />
+      <TinyIconBtn
+        label="Archive"
+        variant="danger"
+        onClick={onArchive}
+        disabled={disabled}
+      />
     </div>
   )
 }
 
-/** New job row: requires Save; blocks duplicates; offers Unarchive */
 function JobRowNew({
   job,
   allJobs,
@@ -908,140 +1080,54 @@ function JobRowNew({
   const canSave = !disabled && !!trimmed && !hasActiveDup && !matchesArchived
 
   return (
-    <div style={{ display: 'grid', gap: 6 }}>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr auto auto',
-          gap: 8,
-          alignItems: 'center',
-        }}
-      >
-        <input
-          className="input"
-          value={name}
-          onChange={(e) => !disabled && setName(e.target.value)}
-          placeholder="e.g., Server"
-          disabled={disabled}
-          style={{ fontSize: 14 }}
-        />
-        {matchesArchived ? (
-          <button
-            className="btn"
-            type="button"
-            onClick={() => onUnarchiveExisting?.(archivedMatch.id)}
-            disabled={disabled}
-            title="Unarchive existing job with this name"
-          >
-            Unarchive existing
-          </button>
-        ) : (
-          <button
-            className="btn btn-primary"
-            type="button"
-            onClick={() => onSave?.(trimmed)}
-            disabled={!canSave}
-          >
-            Save
-          </button>
-        )}
-        <button
-          className="btn secondary"
-          type="button"
-          onClick={onCancel}
-          disabled={disabled}
-        >
-          Cancel
-        </button>
-      </div>
-
-      {!trimmed && <div className="note">Enter a job name to save.</div>}
-      {hasActiveDup && (
-        <div className="note" style={{ color: '#b91c1c' }}>
-          A job with this name already exists. Choose a different name.
-        </div>
-      )}
-      {matchesArchived && (
-        <div className="note" style={{ color: '#b45309' }}>
-          This name exists in Archived. Click “Unarchive existing” to restore
-          it.
-        </div>
-      )}
-    </div>
-  )
-}
-
-/** Existing active job row: input + red Archive */
-function JobRowActive({ job, disabled, onChangeName, onArchive }) {
-  return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr auto',
-        gap: 8,
-        alignItems: 'center',
-      }}
-    >
+    <div className="newrow">
       <input
         className="input"
-        value={job.name}
-        onChange={(e) => !disabled && onChangeName(e.target.value)}
+        value={name}
+        onChange={(e) => !disabled && setName(e.target.value)}
         placeholder="e.g., Server"
         disabled={disabled}
         style={{ fontSize: 14 }}
       />
-      <button
-        className="btn btn-danger"
-        type="button"
-        onClick={onArchive}
-        disabled={disabled}
-        title="Archive job"
-      >
-        Archive
-      </button>
-    </div>
-  )
-}
-
-/** Archived job chip: read-only label + Unarchive button */
-function JobChipArchived({ job, onUnarchive, disabled }) {
-  return (
-    <div
-      className="chip"
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '6px 10px',
-        borderRadius: 999,
-        border: '1px solid var(--card-border, #e5e7eb)',
-        background: 'var(--muted-bg, #f8fafc)',
-        fontSize: 13,
-      }}
-    >
-      <span
-        style={{
-          color: '#6b7280',
-          textDecoration: 'line-through',
-          maxWidth: 220,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
-        title={job.name}
-      >
-        {job.name || '(untitled)'}
-      </span>
-      <button
-        className="btn"
-        type="button"
-        onClick={onUnarchive}
-        disabled={disabled}
-        title="Unarchive job"
-        style={{ padding: '2px 8px' }}
-      >
-        Unarchive
-      </button>
+      {matchesArchived ? (
+        <TinyIconBtn
+          label="Unarchive existing"
+          onClick={() => onUnarchiveExisting?.(archivedMatch.id)}
+          disabled={disabled}
+        />
+      ) : (
+        <TinyIconBtn
+          label="Save"
+          variant="primary"
+          onClick={() => onSave?.(trimmed)}
+          disabled={!canSave}
+        />
+      )}
+      <TinyIconBtn label="Cancel" onClick={onCancel} disabled={disabled} />
+      <div className="help">
+        {!trimmed && <div className="note">Enter a job name to save.</div>}
+        {hasActiveDup && (
+          <div className="note" style={{ color: '#b91c1c' }}>
+            A job with this name already exists.
+          </div>
+        )}
+        {matchesArchived && (
+          <div className="note" style={{ color: '#b45309' }}>
+            This name exists in Archived. Use “Unarchive existing”.
+          </div>
+        )}
+      </div>
+      <style jsx>{`
+        .newrow {
+          display: grid;
+          grid-template-columns: 1fr auto auto;
+          gap: 8px;
+          align-items: center;
+        }
+        .help {
+          grid-column: 1 / -1;
+        }
+      `}</style>
     </div>
   )
 }

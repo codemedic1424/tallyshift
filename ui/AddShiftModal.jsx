@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSettings } from '../lib/useSettings'
+import { MonitorDown } from 'lucide-react'
 
 // Local-safe YYYY-MM-DD from a Date
 function isoDate(d) {
@@ -40,6 +41,13 @@ export default function AddShiftModal({
     typeof showCardInput === 'boolean'
       ? showCardInput
       : payoutMode === 'both' || payoutMode === 'card_only'
+  // derive tipout pct from prop OR settings
+  const defaultTipoutPctEff =
+    typeof defaultTipoutPct === 'number'
+      ? defaultTipoutPct
+      : typeof settings?.default_tipout_pct === 'number'
+        ? settings.default_tipout_pct
+        : null
 
   const [saving, setSaving] = useState(false)
 
@@ -146,7 +154,7 @@ export default function AddShiftModal({
   useEffect(() => {
     if (!open) return
     if (tipOutDirty) return
-    if (defaultTipoutPct == null) return
+    if (defaultTipoutPctEff == null) return
     if (tipsOnPaycheckEff) return
     const cashV = showCashInputEff ? Number(formatCurrencyValue(cash) || 0) : 0
     const cardV = showCardInputEff ? Number(formatCurrencyValue(card) || 0) : 0
@@ -155,7 +163,7 @@ export default function AddShiftModal({
       if (tipOut !== '') setTipOut('')
       return
     }
-    const computed = ((totalTips * defaultTipoutPct) / 100).toFixed(2)
+    const computed = ((totalTips * defaultTipoutPctEff) / 100).toFixed(2)
     if (tipOut !== computed) setTipOut(computed)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -164,7 +172,7 @@ export default function AddShiftModal({
     card,
     tipOut,
     tipOutDirty,
-    defaultTipoutPct,
+    defaultTipoutPctEff,
     tipsOnPaycheckEff,
     showCashInputEff,
     showCardInputEff,
@@ -253,6 +261,30 @@ export default function AddShiftModal({
         isolation: 'isolate',
       }}
     >
+      <style jsx>{`
+        /* Normalize the date input ONLY inside this modal */
+        :global(.modal-card input[type='date']) {
+          height: 40px; /* match your control height */
+          padding: 0 12px; /* same horizontal padding */
+          font-size: 14px; /* same text size as others */
+          box-sizing: border-box;
+          width: 100%;
+          min-width: 0;
+          -webkit-appearance: none;
+        }
+        /* Trim WebKit's internal padding so it doesn't look taller */
+        :global(.modal-card input[type='date']::-webkit-datetime-edit),
+        :global(.modal-card input[type='date']::-webkit-date-and-time-value) {
+          padding: 0;
+          line-height: 40px; /* vertically centers the text */
+        }
+        :global(
+          .modal-card input[type='date']::-webkit-calendar-picker-indicator
+        ) {
+          margin-right: 6px; /* avoid chevron clipping */
+        }
+      `}</style>
+
       <div
         className="modal-card"
         onClick={(e) => e.stopPropagation()}
@@ -335,6 +367,7 @@ export default function AddShiftModal({
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
+                  style={{ width: '100%', minWidth: 0 }}
                 />
               </label>
 
@@ -477,9 +510,9 @@ export default function AddShiftModal({
                       prev ? formatCurrencyValue(prev) : '',
                     ),
                 )}
-                {defaultTipoutPct != null && !tipsOnPaycheckEff && (
+                {defaultTipoutPctEff != null && !tipsOnPaycheckEff && (
                   <div className="note" style={{ marginTop: 4 }}>
-                    Auto-filled at {defaultTipoutPct}% of tips. Adjust if
+                    Auto-filled at {defaultTipoutPctEff}% of tips. Adjust if
                     needed.
                   </div>
                 )}

@@ -1,5 +1,11 @@
 /* =========================================
-   TallyShift – Cleaned, Consolidated Styles
+   TallyShift — Globals (cleaned & de-duplicated)
+   -------------------------------------------------
+   Notes:
+   • Single source of truth for tokens & heights
+   • One tab bar block, one modal block
+   • Page owns scrolling; body only locks when .modal-open
+   • Inputs can shrink in flex/grid rows (fixes iOS date overflow)
    ========================================= */
 
 /* ---------- Tokens / Theme ---------- */
@@ -22,7 +28,8 @@
 
   /* Layout */
   --container-w: 720px;
-  --tabbar-h: 64px;
+  --tabbar-h: 64px; /* keep in sync with .tabbar height */
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* ---------- Base ---------- */
@@ -33,6 +40,7 @@ html,
 body {
   padding: 0;
   margin: 0;
+  min-height: 100dvh;
 }
 body {
   font-family:
@@ -47,11 +55,24 @@ hr {
   margin: 16px 0;
 }
 
+/* Lock background only when a modal is open */
+body.modal-open {
+  overflow: hidden;
+  touch-action: none;
+}
+
 /* ---------- Layout ---------- */
 .page {
-  min-height: 100vh;
-  padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  /* Page is the scroll root */
+  min-height: 100dvh;
+  height: 100%;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   background: var(--bg);
+  padding-bottom: calc(
+    var(--tabbar-h) + var(--safe-bottom)
+  ); /* clear fixed tabbar */
 }
 .container {
   max-width: var(--container-w);
@@ -85,7 +106,7 @@ hr {
   color: var(--muted);
 }
 
-/* ---------- Card ---------- */
+/* ---------- Cards ---------- */
 .card {
   background: var(--card);
   border: 1px solid var(--border);
@@ -101,14 +122,10 @@ hr {
 .card:hover {
   box-shadow: var(--shadow-hover);
 }
-
-/* KPI accent (home) */
 .card.home-stat {
   border-top: 3px solid rgba(37, 99, 235, 0.35);
   padding-top: 10px;
 }
-
-/* Alerts / badges */
 .alert {
   padding: 10px;
   background: #fef3c7;
@@ -155,7 +172,6 @@ hr {
   color: var(--text);
   border-color: var(--text);
 }
-
 .btn-primary {
   background: var(--brand);
   border-color: #1d4ed8;
@@ -164,7 +180,6 @@ hr {
 .btn-primary:hover {
   background: #1d4ed8;
 }
-
 .btn.btn-danger {
   background: #dc2626;
   border-color: #b91c1c;
@@ -178,8 +193,12 @@ hr {
 .field-input,
 input[type='email'],
 input[type='password'],
-input[type='text'] {
+input[type='text'],
+input[type='date'],
+select,
+textarea {
   width: 100%;
+  min-width: 0; /* allow shrink in flex/grid */
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -191,6 +210,7 @@ input[type='text'] {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
 }
 .field-label {
   font-size: 12px;
@@ -223,6 +243,43 @@ input[type='text'] {
   transform: translateY(-1px);
 }
 
+/* Fields with inline icons (e.g., password toggle) */
+.field-with-icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.field-with-icon .field-input {
+  padding-right: 40px;
+  font-size: 16px;
+}
+.field-icon {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: 0;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  cursor: pointer;
+}
+.field-icon:hover {
+  color: #111827;
+}
+.field-icon:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.field-icon svg {
+  pointer-events: none;
+}
+
 /* ---------- App Bar ---------- */
 .appbar {
   position: sticky;
@@ -251,7 +308,7 @@ input[type='text'] {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 50;
+  z-index: 1000;
   display: flex;
   align-items: stretch;
   justify-content: space-between;
@@ -259,7 +316,7 @@ input[type='text'] {
   border-top: 1px solid var(--border);
   box-shadow: var(--shadow-soft);
   height: var(--tabbar-h);
-  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  padding: 6px 8px calc(6px + var(--safe-bottom));
 }
 .tab-item,
 .tab-item:visited {
@@ -352,9 +409,13 @@ input[type='text'] {
   }
 }
 
+/* Hide tabbar when virtual keyboard open (optional) */
+html.keyboard-open .tabbar {
+  display: none;
+}
+
 /* ---------- Hero (Home) ---------- */
 .home-hero {
-  /* keep your recent preference more readable; tweak as you like */
   background: linear-gradient(135deg, #0ea5e9 0%, #22d3ee 100%);
   color: #fff;
   padding: 18px 16px 12px;
@@ -438,16 +499,63 @@ input[type='text'] {
   text-decoration: none !important;
 }
 
+/* Large avatar block (profile) */
+.avatar-stack {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+.avatar-wrap-lg {
+  position: relative;
+  width: 112px;
+  height: 112px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #eef2ff;
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.avatar-fallback-lg {
+  font-weight: 800;
+  color: #374151;
+  font-size: 28px;
+}
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.avatar-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 13px;
+  text-align: center;
+  padding: 4px 0;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.avatar-wrap-lg:hover .avatar-overlay {
+  opacity: 1;
+}
+
 /* ---------- FAB ---------- */
 .fab-wrap {
   position: fixed;
   right: max(16px, env(safe-area-inset-right));
-  bottom: calc(var(--tabbar-h) + max(16px, env(safe-area-inset-bottom)) + 12px);
-  z-index: 10001;
+  bottom: calc(var(--tabbar-h) + max(16px, var(--safe-bottom)) + 12px);
+  z-index: 1001;
 }
 .fab {
   width: 56px;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 1/1;
   border-radius: 50%;
   border: none;
   padding: 0;
@@ -462,6 +570,7 @@ input[type='text'] {
     transform 0.15s ease,
     box-shadow 0.15s ease,
     background 0.15s ease;
+  will-change: transform, box-shadow;
 }
 .fab:hover {
   transform: translateY(-1px) scale(1.03);
@@ -469,6 +578,90 @@ input[type='text'] {
 }
 .fab:active {
   transform: translateY(0) scale(0.98);
+}
+.fab.open .fab-icon {
+  transform: rotate(45deg);
+  transition: transform 160ms ease;
+}
+
+/* FAB menu */
+.fab-scrim {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: default;
+  z-index: 1001;
+}
+.fab-menu {
+  position: absolute;
+  right: 0;
+  bottom: 64px;
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+  z-index: 1002;
+  opacity: 0;
+  transform: translateY(6px) scale(0.98);
+  pointer-events: none;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+.fab-menu.open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+.fab-menu-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: #0f172a;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 9999px;
+  padding: 10px 14px 10px 12px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  transform: translateY(2px);
+  transition:
+    transform 120ms ease,
+    background 120ms ease,
+    box-shadow 120ms ease;
+}
+.fab-menu-item:hover {
+  background: #0b1222;
+  transform: translateY(0);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.28);
+}
+.fab-menu-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: saturate(140%) blur(2px);
+  flex: 0 0 auto;
+}
+.fab-menu-label {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fab-menu,
+  .fab,
+  .fab-menu-item,
+  .fab .fab-icon {
+    transition: none !important;
+  }
 }
 
 /* ---------- Calendar ---------- */
@@ -510,21 +703,17 @@ input[type='text'] {
   color: var(--bg);
   border-color: var(--text);
 }
-
 .cal-grid {
   display: grid;
   gap: 8px;
 }
-.cal-month {
-  grid-template-columns: repeat(7, 1fr);
-}
+.cal-month,
 .cal-week {
   grid-template-columns: repeat(7, 1fr);
 }
 .cal-day {
   grid-template-columns: 1fr;
 }
-
 .cal-cell {
   background: var(--card);
   border: 1px solid var(--border);
@@ -564,8 +753,30 @@ input[type='text'] {
   font-size: 11px;
   color: var(--muted);
 }
+.cal-add-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: #2563eb;
+  color: white;
+  font-size: 14px;
+  font-weight: bold;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+}
+.cal-add-btn:hover {
+  background: #1d4ed8;
+}
 
-/*
 /* ---------- Auth ---------- */
 .auth-card {
   max-width: 520px;
@@ -601,8 +812,7 @@ input[type='text'] {
   border-color: var(--text);
 }
 .auth-head {
-  padding: 16px;
-  padding-bottom: 0;
+  padding: 16px 16px 0;
 }
 .auth-form {
   display: grid;
@@ -660,7 +870,7 @@ footer {
   text-align: center;
 }
 
-/* Profile card layout */
+/* ---------- Profile Card Layout ---------- */
 .profile-card {
   display: grid;
   gap: 12px;
@@ -682,8 +892,6 @@ footer {
   color: #713f12;
   border: 1px solid #fde68a;
 }
-
-/* Two-column body that collapses on small screens */
 .profile-card-body {
   display: grid;
   grid-template-columns: 140px 1fr;
@@ -695,49 +903,6 @@ footer {
     grid-template-columns: 1fr;
   }
 }
-
-/* Avatar block */
-.avatar-stack {
-  display: grid;
-  gap: 8px;
-  justify-items: center;
-}
-.avatar-wrap-lg {
-  position: relative;
-  width: 112px;
-  height: 112px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: #eef2ff;
-  box-shadow: var(--shadow-soft);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.avatar-fallback-lg {
-  font-weight: 800;
-  color: #374151;
-  font-size: 28px;
-}
-.avatar-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-/* Overlay change button */
-.avatar-change {
-  position: absolute;
-  right: 6px;
-  bottom: 6px;
-  padding: 6px 8px;
-  font-size: 12px;
-  border-radius: 999px;
-  backdrop-filter: saturate(140%) blur(6px);
-}
-
-/* Name block */
 .profile-name {
   display: grid;
   gap: 6px;
@@ -753,234 +918,31 @@ footer {
   margin-top: 6px;
 }
 
-.avatar-wrap-lg {
-  width: 96px;
-  height: 96px;
-  border-radius: 999px;
-  overflow: hidden;
-  position: relative;
-  cursor: pointer;
-  background: #f3f4f6;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.avatar-wrap-lg img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.avatar-fallback-lg {
-  font-size: 32px;
-  font-weight: 700;
-  color: #374151;
-}
-
-.avatar-overlay {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: rgba(0, 0, 0, 0.5);
-  color: #fff;
-  font-size: 13px;
-  text-align: center;
-  padding: 4px 0;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.avatar-wrap-lg:hover .avatar-overlay {
-  opacity: 1;
-}
-
-/* Scrim behind the tiny menu (click to close) */
-.fab-scrim {
-  position: fixed;
-  inset: 0;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  cursor: default;
-  z-index: 10001; /* below the menu, above page */
-}
-
-/* Container is already positioned by .fab-wrap in your CSS */
-
-/* Menu: pretty + animated */
-.fab-menu {
-  position: absolute;
-  right: 0;
-  bottom: 64px; /* button size + gap */
-  display: grid;
-  gap: 8px;
-  justify-items: end;
-  z-index: 10002;
-
-  opacity: 0;
-  transform: translateY(6px) scale(0.98);
-  pointer-events: none;
-
-  transition:
-    opacity 140ms ease,
-    transform 140ms ease;
-}
-.fab-menu.open {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-  pointer-events: auto;
-}
-
-/* Menu item: pill with icon bubble */
-.fab-menu-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-
-  background: #0f172a; /* slate-900 */
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 9999px;
-  padding: 10px 14px 10px 12px;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
-  cursor: pointer;
-
-  transform: translateY(2px);
-  transition:
-    transform 120ms ease,
-    background 120ms ease,
-    box-shadow 120ms ease;
-}
-.fab-menu-item:hover {
-  background: #0b1222;
-  transform: translateY(0);
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.28);
-}
-
-.fab-menu-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 9999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: saturate(140%) blur(2px);
-  flex: 0 0 auto;
-}
-.fab-menu-label {
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.2px;
-  white-space: nowrap;
-}
-
-/* Main FAB: add pop + spin animation */
-.fab {
-  /* you already set size/colors elsewhere */
-  will-change: transform, box-shadow;
-  transition:
-    transform 140ms ease,
-    box-shadow 140ms ease,
-    background 140ms ease;
-}
-.fab.open .fab-icon {
-  transform: rotate(45deg); /* plus → close */
-  transition: transform 160ms ease;
-}
-
-/* Motion-friendly for reduced motion users */
-@media (prefers-reduced-motion: reduce) {
-  .fab-menu,
-  .fab,
-  .fab-menu-item {
-    transition: none !important;
-  }
-  .fab .fab-icon {
-    transition: none !important;
-  }
-}
-
-/* === Fix password field icons === */
-.field-with-icon {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.field-input {
-  width: 100%;
-  padding-right: 40px; /* leave space for the icon */
-  font-size: 16px; /* prevents iOS zoom on focus */
-}
-
-.field-icon {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: transparent;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #6b7280; /* muted gray */
-  cursor: pointer;
-}
-
-.field-icon:hover {
-  color: #111827; /* darker on hover */
-}
-
-.field-icon:focus-visible {
-  outline: 2px solid #2563eb; /* blue ring for accessibility */
-  outline-offset: 2px;
-  border-radius: 6px;
-}
-
-.field-icon svg {
-  pointer-events: none; /* clicks go to the button, not the SVG */
-}
-
-/* ===== Light Mode Modals (drop-in) ===== */
-
-/* Backdrop */
+/* ---------- Modals (single canonical implementation) ---------- */
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1000; /* above page + tabbar */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px; /* safe spacing on mobile */
+  height: 100dvh;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
   background: rgba(0, 0, 0, 0.45);
-  -webkit-backdrop-filter: blur(0px);
-  backdrop-filter: blur(0px);
 }
-
-/* Card container */
 .modal-card {
-  width: min(640px, 92vw);
-  max-height: 90vh;
+  position: fixed;
+  z-index: 10001;
+  max-width: 640px;
+  width: calc(100vw - 32px);
+  max-height: calc(100dvh - 24px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-
-  background: #ffffff;
-  color: var(--text, #111827);
-  border: 1px solid var(--border, #e5e7eb);
+  background: #fff;
+  color: var(--text);
+  border: 1px solid var(--border);
   border-radius: 16px;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
-
-  /* pleasant entrance */
   transform: translateY(6px) scale(0.985);
   opacity: 0;
   animation: modal-in 140ms ease forwards;
@@ -991,15 +953,13 @@ footer {
     opacity: 1;
   }
 }
-
-/* Header */
 .modal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   padding: 14px 16px;
-  border-bottom: 1px solid var(--border, #e5e7eb);
+  border-bottom: 1px solid var(--border);
   background: #fff;
 }
 .modal-title {
@@ -1007,160 +967,27 @@ footer {
   font-weight: 800;
   line-height: 1.15;
 }
-
-/* Body */
 .modal-body {
   flex: 1 1 auto;
   padding: 16px;
   display: grid;
   gap: 12px;
-  overflow: auto; /* scroll long content */
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 80px);
 }
-.modal-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 14px;
-}
-.modal-note {
-  font-size: 12px;
-  color: var(--muted, #6b7280);
-}
-
-/* Footer / actions */
 .modal-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
   display: flex;
   gap: 8px;
   padding: 12px 16px;
-  border-top: 1px solid var(--border, #e5e7eb);
+  border-top: 1px solid var(--border);
   background: #fff;
   justify-content: flex-end;
   flex-wrap: wrap;
-}
-
-/* Inputs inside modals stay readable */
-.modal-card .input,
-.modal-card .field-input,
-.modal-card textarea,
-.modal-card select {
-  background: #fff;
-  color: var(--text, #111827);
-  border: 1px solid var(--border, #e5e7eb);
-  border-radius: 12px;
-}
-.modal-card .field-label {
-  color: var(--muted, #6b7280);
-}
-
-/* Secondary button on white */
-.modal-card .btn.secondary {
-  background: #fff;
-  color: var(--text, #111827);
-  border: 1px solid var(--text, #111827);
-}
-
-/* Danger/primary keep your existing palette if defined */
-.modal-card .btn.btn-danger {
-  background: #dc2626;
-  border-color: #b91c1c;
-  color: #fff;
-}
-.modal-card .btn.btn-danger:hover {
-  background: #b91c1c;
-}
-.modal-card .btn.btn-primary {
-  background: #2563eb;
-  border-color: #1d4ed8;
-  color: #fff;
-}
-.modal-card .btn.btn-primary:hover {
-  background: #1d4ed8;
-}
-
-/* Tiny close button style (if you use an icon/“×” button) */
-.modal-card .cal-btn,
-.modal-close {
-  border: 1px solid var(--border, #e5e7eb);
-  background: #fff;
-  color: var(--text, #111827);
-  padding: 6px 10px;
-  border-radius: 10px;
-  cursor: pointer;
-}
-
-/* Shift preview chips used inside DaySheet/Details */
-.modal-card .cal-shift {
-  background: #fff;
-  color: #111827;
-  border: 1px solid var(--border, #e5e7eb);
-  border-radius: 10px;
-  padding: 8px;
-  font-size: 13px;
-  margin-bottom: 6px;
-}
-.modal-card .cal-shift .note {
-  color: var(--muted, #6b7280);
-}
-
-/* Mobile: let the card breathe edge-to-edge without feeling cramped */
-@media (max-width: 420px) {
-  .modal-card {
-    width: 100%;
-    max-width: 520px;
-    border-radius: 14px;
-  }
-  .modal-body {
-    padding: 14px;
-  }
-  .modal-actions {
-    padding: 10px 14px;
-  }
-}
-
-.cal-add-btn {
-  width: 20px; /* smaller circle */
-  height: 20px;
-  border-radius: 50%;
-  border: none;
-  background: #2563eb; /* accent blue */
-  color: white;
-  font-size: 14px; /* smaller + */
-  font-weight: bold;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.2s ease;
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 2;
-}
-
-.cal-add-btn:hover {
-  background: #1d4ed8;
-}
-
-/* Highlight any changed fields when user cancels close */
-.field-changed {
-  outline: 2px solid #fca5a5; /* red-300 */
-  outline-offset: 2px;
-}
-
-/* Sticky actions bar at the bottom of SettingsPanel */
-.settings-actions {
-  position: sticky;
-  bottom: 0;
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  background: var(--card, #fff);
-  border-top: 1px solid var(--border, #e5e7eb);
-  padding: 12px 16px;
-  border-bottom-left-radius: 16px;
-  border-bottom-right-radius: 16px;
 }
 
 /* Inline confirm overlay inside modal */
@@ -1171,7 +998,7 @@ footer {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 110; /* above modal-card content */
+  z-index: 110;
 }
 .confirm-card {
   width: min(420px, 92vw);
@@ -1183,11 +1010,11 @@ footer {
   padding: 16px;
 }
 
-/* Minimal toast (green) */
+/* Minimal toast */
 .toast {
   position: fixed;
   left: 50%;
-  bottom: calc(16px + env(safe-area-inset-bottom));
+  bottom: calc(16px + var(--safe-bottom));
   transform: translateX(-50%) translateY(10px);
   opacity: 0;
   padding: 10px 14px;
@@ -1207,311 +1034,29 @@ footer {
   transform: translateX(-50%) translateY(0);
 }
 
-/* Make the modal cover the whole screen */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background: rgba(0, 0, 0, 0); /* fully transparent backdrop */
-}
-
-/* The white box itself */
-.modal-card {
-  background: #fff;
-  border-radius: 12px;
-  padding: 16px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-}
-
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  display: flex;
-  justify-content: center; /* centers horizontally */
-  align-items: center; /* centers vertically */
-  background: transparent; /* no gray overlay */
-}
-
-.modal-card {
-  background: #fff;
-  border-radius: 12px;
-  padding: 16px;
-  max-width: 640px;
-  width: 100%;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-}
-
-html.keyboard-open .tabbar {
-  display: none;
-}
-.tabbar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 1000;
-
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-
-  height: 64px;
-  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
-  background: var(--card, #fff);
-  border-top: 1px solid var(--border, #e5e7eb);
-  box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.05);
-
-  -webkit-transform: translateZ(0);
-  transform: translateZ(0);
-}
-
-.tab-item {
-  flex: 1;
-  text-align: center;
-  font-size: 12px;
-  color: var(--text-muted, #666);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-}
-
-.tab-item.active {
-  color: var(--primary, #0ea5e9);
-  font-weight: 600;
-}
-
-.page {
-  /* prevents content from being hidden under tabbar */
-  padding-bottom: calc(72px + env(safe-area-inset-bottom));
-}
-
-/* 0) Base: never let the document body scroll */
-html,
-body {
-  height: 100%;
-}
-body {
-  overflow: hidden; /* <- lock body */
-  overscroll-behavior: none;
-  touch-action: manipulation;
-}
-
-/* 1) Fixed viewport wrapper (prevents browser UI from pushing content) */
-.app-viewport {
-  position: fixed;
-  inset: 0;
-  /* modern dynamic viewport unit handles iOS toolbars better */
-  height: 100dvh; /* fallback handled by 'inset:0' */
-  width: 100%;
-  overflow: hidden; /* child will scroll, not body */
-  background: var(--bg, #f9fafb);
-}
-
-/* 2) Make your per-page container the *only* scrollable area */
-.page {
-  /* Fill the fixed viewport */
-  height: 100%;
-  overflow: auto; /* <- scroll here only */
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-
-  /* Keep content clear of the fixed TabBar */
-  padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
-}
-
-/* 3) Keep the TabBar hard-pinned (works with your vv-offset hack) */
-.tabbar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--vv-offset, 0px));
-  z-index: 1000;
-
-  /* your existing styles… */
-}
-
-/* (Optional) prevent a nested scroll from creating a second scroll root */
-.container {
-  /* Remove any accidental overflow here so .page is the scroll owner */
-  overflow: visible;
-}
-
-/* Tab bar size token */
-:root {
-  --tabbar-h: 64px; /* keep this in sync with your TabBar height */
-}
-
-/* Make sure TabBar uses the same height token */
-.tabbar {
-  height: var(--tabbar-h);
-  padding-bottom: env(safe-area-inset-bottom);
-}
-
-/* Ensure the scrollable page content clears the TabBar */
-.page {
-  /* you already have overflow:auto from earlier */
-  padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
-}
-
-/* If some pages use .container as the scroller instead of .page, add this too */
-.container {
-  padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
-}
-
-/* Keep TabBar below modals */
-.tabbar {
-  z-index: 1000;
-}
-
-/* Put modals above everything */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 2000; /* higher than tabbar */
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px; /* safe edge spacing on mobile */
-}
-
-/* Make modal content scroll instead of hiding behind the bar */
-.modal-card {
-  width: min(560px, 92vw);
-  max-height: calc(100vh - 48px); /* keep buttons visible on small screens */
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 16px;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
-  display: flex;
-  flex-direction: column;
-}
-
-.modal-head {
-  padding: 14px 16px;
-  border-bottom: 1px solid #f1f5f9;
-}
-.modal-body {
-  padding: 16px;
-  overflow: auto;
-}
-.modal-actions {
-  position: sticky; /* keep actions visible when body scrolls */
-  bottom: 0;
-  padding: 12px 16px;
-  border-top: 1px solid #f1f5f9;
-  background: #fff;
-}
-
-/* Lock background when a modal is open */
-body.modal-open {
-  overflow: hidden;
-  touch-action: none; /* prevents background touch scroll on Android */
-}
-
-/* Make the modal body scroll independently and not chain to page */
-.modal-body {
-  overflow: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain; /* key: stop bubbling to page */
-  max-height: calc(
-    100dvh - var(--tabbar-h) - 32px
-  ); /* header/footer padding buffer */
-  padding-bottom: max(16px, env(safe-area-inset-bottom));
-}
-
-/* Ensure the modal container sizes relative to *visual* viewport */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  height: 100dvh; /* use dynamic viewport, not 100vh */
-}
-
-/* === FORCE TOP-OF-STACK MODALS & TABBAR CLEARANCE (append last) === */
-:root {
-  --tabbar-h: 64px;
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
-}
-
-/* Keep tab bar below modals, and make its height/padding canonical */
-.tabbar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: calc(var(--tabbar-h) + var(--safe-bottom));
-  padding-bottom: var(--safe-bottom);
-  z-index: 1000 !important;
-  transform: none !important; /* avoid creating a new stacking context */
-}
-
-/* Modal backdrop always above the tab bar and sized to the *dynamic* viewport */
-.modal-backdrop {
-  position: fixed !important;
-  inset: 0 !important;
-  height: 100dvh !important;
-  z-index: 10000 !important;
-  display: grid !important;
-  place-items: center !important;
-  background: rgba(0, 0, 0, 0.45) !important;
-}
-
-/* Modal panel floats above backdrop; use dvh to avoid iOS 100vh issues */
-.modal-card {
-  position: fixed !important;
-  z-index: 10001 !important;
-  max-width: 640px;
-  width: calc(100vw - 32px);
-  max-height: calc(100dvh - 24px);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  background: #fff;
-  border: 1px solid var(--border, #e5e7eb);
-  border-radius: 16px;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
-}
-
-/* Scroll inside the modal, and leave room for the tab bar + sticky actions */
-.modal-body {
-  overflow: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  padding: 16px;
-  padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 80px);
-  max-height: calc(100dvh - 140px); /* header+footer buffer */
-}
-
-/* Keep action buttons visible while body scrolls */
-.modal-actions {
+/* ---------- Settings sticky actions (inside cards) ---------- */
+.settings-actions {
   position: sticky;
   bottom: 0;
-  z-index: 1;
-  background: #fff;
-  border-top: 1px solid var(--border, #e5e7eb);
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  background: var(--card);
+  border-top: 1px solid var(--border);
   padding: 12px 16px;
+  border-bottom-left-radius: 16px;
+  border-bottom-right-radius: 16px;
 }
 
-/* Ensure the scrolling page never hides behind the fixed tab bar */
-.page,
+/* ---------- Utilities ---------- */
+.field-changed {
+  outline: 2px solid #fca5a5;
+  outline-offset: 2px;
+}
+
+/* Ensure any main containers also clear the tabbar if they are scrollers */
 main,
 .scroll-area,
 .container {
-  padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom)) !important;
-}
-
-/* Use dynamic viewport for the document root on mobile */
-html,
-body,
-#__next {
-  min-height: 100dvh;
+  padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom));
 }
