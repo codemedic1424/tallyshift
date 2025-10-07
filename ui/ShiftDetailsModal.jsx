@@ -9,6 +9,215 @@ function parseDateOnlyLocal(s) {
   return new Date(y, (m || 1) - 1, d || 1)
 }
 
+/* ================= Weather helpers (display only) ================= */
+
+function pickWeatherObject(shift) {
+  // Support a few common keys you might have used
+  return shift?.weather || shift?.weather_snapshot || shift?.wx || null
+}
+function cToF(c) {
+  return c == null ? null : +((c * 9) / 5 + 32).toFixed(1)
+}
+function fmtTemp(n) {
+  return n == null ? null : `${Math.round(n)}°`
+}
+function fmtPrecip(inches, mm) {
+  if (inches != null) return `${inches.toFixed(inches < 0.1 ? 2 : 1)} in`
+  if (mm != null) return `${mm.toFixed(mm < 1 ? 1 : 0)} mm`
+  return null
+}
+function iconFor(code) {
+  if (code == null) return '🌡️'
+  if ([0].includes(code)) return '☀️'
+  if ([1, 2, 3].includes(code)) return '⛅'
+  if ([45, 48].includes(code)) return '🌫️'
+  if ([51, 53, 55, 56, 57].includes(code)) return '🌦️'
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return '🌧️'
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return '🌨️'
+  if ([95, 96, 99].includes(code)) return '⛈️'
+  return '🌡️'
+}
+
+// Open-Meteo WMO code → simple descriptor & emoji.
+// (Also used as fallback if you only stored a "code")
+function fromWeatherCode(code) {
+  const c = Number(code)
+  if (Number.isNaN(c)) return { label: 'Weather', emoji: 'ℹ️' }
+  if (c === 0) return { label: 'Clear', emoji: '☀️' }
+  if ([1, 2, 3].includes(c)) return { label: 'Partly cloudy', emoji: '⛅️' }
+  if ([45, 48].includes(c)) return { label: 'Fog', emoji: '🌫️' }
+  if ([51, 53, 55].includes(c)) return { label: 'Drizzle', emoji: '🌦️' }
+  if ([61, 63, 65].includes(c)) return { label: 'Rain', emoji: '🌧️' }
+  if ([66, 67].includes(c)) return { label: 'Freezing rain', emoji: '🌧️❄️' }
+  if ([71, 73, 75].includes(c)) return { label: 'Snow', emoji: '❄️' }
+  if (c === 77) return { label: 'Snow grains', emoji: '❄️' }
+  if ([80, 81, 82].includes(c)) return { label: 'Showers', emoji: '🌦️' }
+  if ([85, 86].includes(c)) return { label: 'Snow showers', emoji: '🌨️' }
+  if ([95, 96, 99].includes(c)) return { label: 'Thunderstorm', emoji: '⛈️' }
+  return { label: 'Weather', emoji: 'ℹ️' }
+}
+
+// Try to normalize a bunch of likely snapshot shapes into a display model
+function normalizeWeather(wxRaw) {
+  if (!wxRaw) return null
+
+  // Common fields you might have stored
+  const hasF = typeof wxRaw.temp_f === 'number'
+  const hasC = typeof wxRaw.temp_c === 'number'
+  const hasK = typeof wxRaw.temperature === 'number'
+  const hasDailyMax = typeof wxRaw.temperature_2m_max === 'number'
+  const hasDailyMin = typeof wxRaw.temperature_2m_min === 'number'
+
+  let tempF = null
+  if (hasF) {
+    tempF = wxRaw.temp_f
+  } else if (hasC) {
+    tempF = Math.round((wxRaw.temp_c * 9) / 5 + 32)
+  } else if (hasK) {
+    // assume °C from some APIs named "temperature"
+    tempF = Math.round((wxRaw.temperature * 9) / 5 + 32)
+  }
+
+  // If you stored daily min/max, show a range:
+  let tempRange = null
+  if (hasDailyMax || hasDailyMin) {
+    const maxF = hasDailyMax
+      ? Math.round((wxRaw.temperature_2m_max * 9) / 5 + 32)
+      : null
+    const minF = hasDailyMin
+      ? Math.round((wxRaw.temperature_2m_min * 9) / 5 + 32)
+      : null
+    if (maxF != null && minF != null) {
+      tempRange = `${minF}° / ${maxF}°`
+      // also prefer showing a middle point as "temperature"
+      tempF = Math.round((minF + maxF) / 2)
+    }
+  }
+
+  // Condition / summary
+  let label = wxRaw.summary || wxRaw.description || null
+  let emoji = wxRaw.emoji || null
+
+  if (!label && typeof wxRaw.weathercode !== 'undefined') {
+    const m = fromWeatherCode(wxRaw.weathercode)
+    label = m.label
+    emoji = emoji || m.emoji
+  }
+
+  // A simple precipitation hint
+  const precipIn =
+    typeof wxRaw.precip_in === 'number'
+      ? wxRaw.precip_in
+      : typeof wxRaw.precipitation_sum === 'number'
+        ? Math.round((wxRaw.precipitation_sum / 25.4) * 100) / 100 // mm → in
+        : null
+  const precipProb =
+    typeof wxRaw.precip_prob === 'number'
+      ? wxRaw.precip_prob
+      : typeof wxRaw.precipitation_probability === 'number'
+        ? wxRaw.precipitation_probability
+        : null
+  const precipType = wxRaw.precip_type || null
+
+  return {
+    tempF: typeof tempF === 'number' ? Math.round(tempF) : null,
+    tempRange, // "42° / 63°" if available
+    label: label || 'Weather',
+    emoji: emoji || '🌤️',
+    precipIn,
+    precipProb,
+    precipType,
+  }
+}
+
+function WeatherStrip({ wx }) {
+  if (!wx) return null
+  const { emoji, tempF, tempRange, label, precipIn, precipProb, precipType } =
+    wx
+
+  // Build a compact right-side details line
+  const bits = []
+  if (tempRange) bits.push(tempRange)
+  if (typeof precipIn === 'number' && precipIn > 0)
+    bits.push(`${precipIn}" ${precipType ? precipType : 'precip'}`)
+  if (typeof precipProb === 'number')
+    bits.push(`${Math.round(precipProb)}% precip`)
+  const right = bits.join(' · ')
+
+  return (
+    <div className="wx">
+      <div className="left">
+        <span className="emoji" aria-hidden>
+          {emoji}
+        </span>
+        <div className="main">
+          <div className="row">
+            {typeof tempF === 'number' ? (
+              <strong className="temp">{tempF}°</strong>
+            ) : null}
+            <span className="label">{label}</span>
+          </div>
+          {right ? <div className="sub">{right}</div> : null}
+        </div>
+      </div>
+      <style jsx>{`
+        .wx {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 12px 14px;
+          background: linear-gradient(135deg, #eff6ff, #f0fdfa);
+          border: 1px solid #e5e7eb;
+          border-radius: 12px;
+          box-shadow: 0 8px 24px rgba(30, 58, 138, 0.06);
+          margin-bottom: 12px;
+        }
+        .left {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          min-width: 0;
+        }
+        .emoji {
+          font-size: 22px;
+          line-height: 1;
+        }
+        .main {
+          display: grid;
+          gap: 2px;
+          min-width: 0;
+        }
+        .row {
+          display: flex;
+          align-items: baseline;
+          gap: 8px;
+          min-width: 0;
+        }
+        .temp {
+          font-size: 18px;
+          font-weight: 900;
+          color: #0f172a;
+        }
+        .label {
+          font-weight: 700;
+          color: #0f172a;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 52vw;
+        }
+        .sub {
+          font-size: 12px;
+          color: #475569;
+        }
+      `}</style>
+    </div>
+  )
+}
+
+/* ======================= Modal ======================= */
+
 export default function ShiftDetailsModal({
   shift,
   onClose,
@@ -173,6 +382,12 @@ export default function ShiftDetailsModal({
 
   if (!shift) return null
 
+  // Weather snapshot → UI model
+  const wxModel = useMemo(() => {
+    const raw = pickWeatherObject(shift)
+    return normalizeWeather(raw)
+  }, [shift])
+
   return createPortal(
     <div
       className="modal-backdrop"
@@ -255,6 +470,79 @@ export default function ShiftDetailsModal({
                 paddingBottom: 'env(safe-area-inset-bottom, 0px)',
               }}
             >
+              {/* Weather snapshot header */}
+              {(() => {
+                const ws = shift?.weather_snapshot
+                if (!ws) return null
+
+                // temps: prefer F, fallback to C → F, then compose a line
+                const tAvgF =
+                  ws.t_avg_f ?? (ws.t_avg_c != null ? cToF(ws.t_avg_c) : null)
+                const tMaxF =
+                  ws.t_max_f ?? (ws.t_max_c != null ? cToF(ws.t_max_c) : null)
+                const tMinF =
+                  ws.t_min_f ?? (ws.t_min_c != null ? cToF(ws.t_min_c) : null)
+
+                const tempLine =
+                  tAvgF != null
+                    ? fmtTemp(tAvgF)
+                    : tMinF != null && tMaxF != null
+                      ? `${fmtTemp(tMinF)} / ${fmtTemp(tMaxF)}`
+                      : tMaxF != null
+                        ? fmtTemp(tMaxF)
+                        : tMinF != null
+                          ? fmtTemp(tMinF)
+                          : null
+
+                const precipText = fmtPrecip(
+                  ws.precip_in ?? null,
+                  ws.precip_mm ?? null,
+                )
+                const hasPrecip =
+                  !!precipText && (ws.precip_in > 0 || ws.precip_mm > 0)
+
+                const icon = iconFor(ws.weathercode)
+                const summary = ws.summary || 'Weather'
+
+                return (
+                  <div
+                    className="weather-hero"
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'auto 1fr auto',
+                      alignItems: 'center',
+                      gap: 10,
+                      border: '1px solid var(--border,#e5e7eb)',
+                      background: '#f8fafc',
+                      borderRadius: 12,
+                      padding: 12,
+                      marginBottom: 12,
+                    }}
+                  >
+                    <div style={{ fontSize: 28, lineHeight: 1 }}>{icon}</div>
+                    <div style={{ display: 'grid', gap: 2, minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontWeight: 800,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {summary}
+                      </div>
+                      <div
+                        className="note"
+                        style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}
+                      >
+                        {tempLine && <span>Temp: {tempLine}</span>}
+                        {hasPrecip && <span>Precip: {precipText}</span>}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
+
               <div className="modal-row">
                 <span>Hours</span>
                 <b>{Number(shift.hours || 0).toFixed(2)}</b>

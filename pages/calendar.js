@@ -300,14 +300,65 @@ export default function CalendarPage({ theme, setTheme }) {
   }
 
   // save new shift coming back from AddShiftModal
+  // Replace the existing handleAddSave in pages/calendar.js with this:
+
   async function handleAddSave(payload) {
     if (!user) return alert('Sign in first')
-    const dbRow = { user_id: user.id, ...payload }
+
+    // --- (A) Try to fetch a weather snapshot (if enabled + coords available) ---
+    let weather_snapshot = null
+    try {
+      if (settings?.track_weather && payload?.date) {
+        // Choose the location to use for weather:
+        const locIdFromShift = payload?.location_id || null
+        const locs = Array.isArray(settings?.locations)
+          ? settings.locations
+          : []
+        const byId = (id) => locs.find((l) => l.id === id)
+        const defaultId = settings?.default_location_id || locs[0]?.id || null
+
+        const loc =
+          (locIdFromShift && byId(locIdFromShift)) ||
+          (defaultId && byId(defaultId)) ||
+          locs[0] ||
+          null
+
+        if (loc?.lat != null && loc?.lon != null) {
+          const res = await fetch('/api/fetch-weather', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              date: payload.date, // 'YYYY-MM-DD'
+              lat: loc.lat,
+              lon: loc.lon,
+            }),
+          })
+          const data = await res.json().catch(() => null)
+          if (data?.ok && data?.snapshot) {
+            weather_snapshot = data.snapshot
+          }
+        } else {
+          // (Optional) console log to help debug missing coords
+          console.warn('track_weather is on, but location is missing lat/lon')
+        }
+      }
+    } catch (err) {
+      console.error('Weather fetch failed (non-blocking):', err)
+    }
+
+    // --- (B) Insert the new row (include weather_snapshot if we have it) ---
+    const dbRow = {
+      user_id: user.id,
+      ...payload,
+      ...(weather_snapshot ? { weather_snapshot } : {}), // only include if fetched
+    }
+
     const { data, error } = await supabase
       .from('shifts')
       .insert(dbRow)
       .select('*')
       .single()
+
     if (error) {
       alert(error.message)
       return

@@ -16,6 +16,10 @@ function normalizeLocation(raw) {
     id: raw?.id || uid(),
     name: String(raw?.name ?? ''),
     active: typeof raw?.active === 'boolean' ? raw.active : true,
+    // weather fields
+    address: typeof raw?.address === 'string' ? raw.address : '',
+    lat: typeof raw?.lat === 'number' ? raw.lat : null,
+    lon: typeof raw?.lon === 'number' ? raw.lon : null,
     track_jobs: typeof raw?.track_jobs === 'boolean' ? raw.track_jobs : false,
     jobs: jobs.map((j) => ({
       id: j?.id || uid(),
@@ -40,6 +44,8 @@ function initFromSettings(s) {
       typeof s?.multiple_locations === 'boolean' ? s.multiple_locations : false,
     default_location_id:
       typeof s?.default_location_id === 'string' ? s.default_location_id : null,
+    // global weather toggle
+    track_weather: s?.track_weather ?? false,
   }
 
   let locations = Array.isArray(s?.locations)
@@ -78,7 +84,7 @@ function initFromSettings(s) {
   return { ...base, locations, default_location_id }
 }
 
-/* ---------------- small UI atoms ---------------- */
+/* ---------------- small UI atoms (design) ---------------- */
 
 function Switch({ checked, onChange, disabled, title }) {
   return (
@@ -182,7 +188,7 @@ function Seg({ value, onChange, options, compact = false }) {
   )
 }
 
-function TinyIconBtn({ label, variant = 'neutral', onClick, disabled }) {
+function TinyIconBtn({ label, variant = 'neutral', onClick, disabled, title }) {
   return (
     <button
       type="button"
@@ -190,7 +196,7 @@ function TinyIconBtn({ label, variant = 'neutral', onClick, disabled }) {
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      title={label}
+      title={title || label}
     >
       {label}
       <style jsx>{`
@@ -246,7 +252,7 @@ export default function SettingsPanel({
     setHighlightChanges(false)
   }, [settings])
 
-  // Fallback default when no settings row exists (but loading finished)
+  // Fallback when no settings row exists
   useEffect(() => {
     if (!loading && !settings && !draft) {
       setDraft(initFromSettings({}))
@@ -352,7 +358,16 @@ export default function SettingsPanel({
     setField('multiple_locations', true)
     replaceLocations([
       ...(draft?.locations || []),
-      { id: uid(), name: '', active: true, track_jobs: false, jobs: [] },
+      {
+        id: uid(),
+        name: '',
+        active: true,
+        track_jobs: false,
+        address: '',
+        lat: null,
+        lon: null,
+        jobs: [],
+      },
     ])
   }
   function toggleArchiveLocation(id) {
@@ -370,6 +385,20 @@ export default function SettingsPanel({
       return
     }
 
+    // If weather is ON, require address for all active locations
+    if (draft.track_weather) {
+      const missing = (draft.locations || [])
+        .filter((l) => l.active)
+        .filter((l) => !String(l.address || '').trim())
+      if (missing.length > 0) {
+        setHighlightChanges(true)
+        alert(
+          'Weather tracking is on. Please add an address for all active locations.',
+        )
+        return
+      }
+    }
+
     const default_location_id = draft.multiple_locations
       ? (draft.default_location_id ?? (primary ? primary.id : null)) ||
         primary.id
@@ -381,6 +410,9 @@ export default function SettingsPanel({
       locations: (draft.locations || []).map((l) => ({
         ...l,
         name: String(l.name || '').trim(),
+        address: String(l.address || '').trim(),
+        lat: typeof l.lat === 'number' ? l.lat : null,
+        lon: typeof l.lon === 'number' ? l.lon : null,
         jobs: (l.jobs || [])
           .map((j) => ({
             ...j,
@@ -501,6 +533,31 @@ export default function SettingsPanel({
           </div>
         </div>
 
+        {/* Weather (global) */}
+        <div className="card" style={{ marginTop: 10, padding: 10 }}>
+          <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
+            Weather
+          </div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr auto',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <div>Track weather for each shift (store daily snapshot)</div>
+            <Switch
+              checked={!!draft.track_weather}
+              onChange={(v) => setField('track_weather', v)}
+            />
+          </div>
+          <div className="note" style={{ marginTop: 6 }}>
+            Requires an address per active location (we’ll look up coordinates
+            automatically).
+          </div>
+        </div>
+
         {/* Primary location row */}
         <LocationRow
           label="Primary"
@@ -508,11 +565,18 @@ export default function SettingsPanel({
           isDefault={draft.default_location_id === primary.id}
           disabled={false}
           showArchivedJobs={showArchivedJobs}
+          showWeatherFields={!!draft.track_weather}
           highlightMissingName={
             highlightChanges && !String(primary?.name || '').trim()
           }
           onChangeName={(v) =>
             updateLocation(primary.id, (l) => ({ ...l, name: v }))
+          }
+          onChangeAddress={(v) =>
+            updateLocation(primary.id, (l) => ({ ...l, address: v }))
+          }
+          onSetCoords={(coords) =>
+            updateLocation(primary.id, (l) => ({ ...l, ...coords }))
           }
           onToggleTrackJobs={(v) =>
             updateLocation(primary.id, (l) => ({ ...l, track_jobs: v }))
@@ -599,11 +663,19 @@ export default function SettingsPanel({
                 label="Location"
                 loc={loc}
                 disabled={false}
+                archived={false}
                 showArchivedJobs={showArchivedJobs}
+                showWeatherFields={!!draft.track_weather}
                 isDefault={draft.default_location_id === loc.id}
                 onMakeDefault={() => setField('default_location_id', loc.id)}
                 onChangeName={(v) =>
                   updateLocation(loc.id, (l) => ({ ...l, name: v }))
+                }
+                onChangeAddress={(v) =>
+                  updateLocation(loc.id, (l) => ({ ...l, address: v }))
+                }
+                onSetCoords={(coords) =>
+                  updateLocation(loc.id, (l) => ({ ...l, ...coords }))
                 }
                 onToggleTrackJobs={(v) =>
                   updateLocation(loc.id, (l) => ({ ...l, track_jobs: v }))
@@ -638,6 +710,7 @@ export default function SettingsPanel({
                   disabled
                   archived
                   showArchivedJobs
+                  showWeatherFields={!!draft.track_weather}
                   onToggleArchive={() => toggleArchiveLocation(loc.id)} // Unarchive
                 />
               ))}
@@ -820,8 +893,11 @@ function LocationRow({
   archived,
   disabled,
   showArchivedJobs,
+  showWeatherFields,
   highlightMissingName,
   onChangeName,
+  onChangeAddress,
+  onSetCoords, // {lat, lon}
   onToggleTrackJobs,
   onToggleArchive,
   onMakeDefault,
@@ -869,6 +945,92 @@ function LocationRow({
             />
           )}
         </div>
+
+        {showWeatherFields && (
+          <div className="wbox">
+            <div className="line tight">
+              <label className="field" style={{ margin: 0 }}>
+                <span className="field-label">
+                  Address (required when weather tracking is on)
+                </span>
+                <input
+                  className="input"
+                  value={loc.address ?? ''}
+                  onChange={(e) =>
+                    !disabled && onChangeAddress?.(e.target.value)
+                  }
+                  placeholder="123 Main St, City, ST"
+                  disabled={disabled}
+                />
+              </label>
+            </div>
+            <div
+              className="line tight"
+              style={{ gridTemplateColumns: '1fr 1fr auto' }}
+            >
+              <label className="field" style={{ margin: 0 }}>
+                <span className="field-label">Latitude</span>
+                <input
+                  className="input"
+                  type="number"
+                  step="0.000001"
+                  value={loc.lat ?? ''}
+                  onChange={(e) =>
+                    !disabled &&
+                    onSetCoords?.({
+                      lat:
+                        e.target.value === '' ? null : Number(e.target.value),
+                      lon: typeof loc.lon === 'number' ? loc.lon : null,
+                    })
+                  }
+                  disabled={disabled}
+                />
+              </label>
+              <label className="field" style={{ margin: 0 }}>
+                <span className="field-label">Longitude</span>
+                <input
+                  className="input"
+                  type="number"
+                  step="0.000001"
+                  value={loc.lon ?? ''}
+                  onChange={(e) =>
+                    !disabled &&
+                    onSetCoords?.({
+                      lat: typeof loc.lat === 'number' ? loc.lat : null,
+                      lon:
+                        e.target.value === '' ? null : Number(e.target.value),
+                    })
+                  }
+                  disabled={disabled}
+                />
+              </label>
+              <TinyIconBtn
+                label="Lookup coords"
+                variant="primary"
+                disabled={disabled}
+                onClick={async () => {
+                  const address = String(loc.address || '').trim()
+                  if (!address) return alert('Enter an address first.')
+                  try {
+                    const resp = await fetch('/api/geocode', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ address }),
+                    })
+                    const data = await resp.json()
+                    if (!data?.ok || !data.found) {
+                      alert('Could not find that address.')
+                      return
+                    }
+                    onSetCoords?.({ lat: data.lat, lon: data.lon })
+                  } catch (e) {
+                    alert('Geocoding failed. Try again.')
+                  }
+                }}
+              />
+            </div>
+          </div>
+        )}
 
         <div className="line">
           <div className="note">Track jobs at this location</div>
@@ -986,8 +1148,17 @@ function LocationRow({
           align-items: center;
           gap: 10px;
         }
+        .line.tight {
+          grid-template-columns: 1fr;
+        }
         .spacer {
           flex: 1;
+        }
+        .wbox {
+          border: 1px dashed var(--border);
+          border-radius: 10px;
+          padding: 10px;
+          background: #fcfcfd;
         }
         .chips {
           display: flex;
