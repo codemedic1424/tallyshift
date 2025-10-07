@@ -9,6 +9,7 @@ import HeaderBar from '../ui/HeaderBar'
 import TabBar from '../ui/TabBar'
 import ShiftDetailsModal from '../ui/ShiftDetailsModal'
 import AddShiftModal from '../ui/AddShiftModal'
+import DaySheet from '../ui/DaySheet'
 
 // ---------- helpers ----------
 const S = { ndash: '\u2013', times: '\u00D7', middot: '\u00B7' }
@@ -695,106 +696,21 @@ export default function CalendarPage({ theme, setTheme }) {
         />
       )}
 
-      {/* MOBILE Day sheet */}
       {daySheetOpen && (
-        <div
-          className="modal-backdrop"
-          onClick={() => setDaySheetOpen(false)}
-          role="dialog"
-          aria-modal="true"
-        >
-          <div
-            className="modal-card"
-            onClick={(e) => e.stopPropagation()}
-            style={{ width: 'min(560px, 92vw)' }}
-          >
-            <div className="modal-head">
-              <div className="modal-title">
-                {parseDateOnlyLocal(daySheetDate).toLocaleDateString()}
-              </div>
-              <button
-                className="cal-btn"
-                onClick={() => setDaySheetOpen(false)}
-                aria-label="Close day details"
-              >
-                {S.times}
-              </button>
-            </div>
-            <div className="modal-body" style={{ display: 'grid', gap: 10 }}>
-              <button
-                className="btn btn-primary"
-                onClick={() => {
-                  openAddFor(parseDateOnlyLocal(daySheetDate))
-                  setDaySheetOpen(false)
-                }}
-              >
-                + Add shift
-              </button>
-              {(byDate.get(daySheetDate) || []).length === 0 && (
-                <div className="note">No shifts yet for this day.</div>
-              )}
-              {(byDate.get(daySheetDate) || []).map((shift) => {
-                const cash = Number(shift?.cash_tips ?? 0)
-                const card = Number(shift?.card_tips ?? 0)
-                const tipout = Number(shift?.tip_out_total ?? 0)
-                const hours = Number(shift?.hours ?? 0)
-                const net = cash + card - tipout
-                const eff = hours > 0 ? net / hours : 0
-                const fmt = (n) =>
-                  currencyFormatter?.format
-                    ? currencyFormatter.format(n)
-                    : `$${Number(n || 0).toFixed(2)}`
-                return (
-                  <div
-                    key={shift.id}
-                    className="cal-shift"
-                    onClick={() => {
-                      setSelectedShift(shift)
-                      setDaySheetOpen(false)
-                    }}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        setSelectedShift(shift)
-                        setDaySheetOpen(false)
-                      }
-                    }}
-                  >
-                    <div>
-                      <b>{fmt(net)}</b> {S.middot} {hours.toFixed(2)}h
-                    </div>
-                    <div className="note">{fmt(eff)} /h</div>
-                    {shift?.notes ? (
-                      <div className="note" style={{ marginTop: 4 }}>
-                        {shift.notes}
-                      </div>
-                    ) : null}
-                  </div>
-                )
-              })}
-            </div>
-            <div
-              className="modal-actions"
-              style={{ justifyContent: 'flex-end' }}
-            >
-              <button
-                className="btn secondary"
-                onClick={() => setDaySheetOpen(false)}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {addOpen && (
-        <AddShiftModal
-          open={true}
-          initialDate={addDate}
-          onClose={() => setAddOpen(false)}
-          onSave={handleAddSave}
+        <DaySheet
+          open={daySheetOpen}
+          dateISO={daySheetDate}
+          shifts={byDate.get(daySheetDate) || []}
+          currencyFormatter={currencyFormatter}
+          onAdd={() => {
+            openAddFor(parseDateOnlyLocal(daySheetDate))
+            setDaySheetOpen(false)
+          }}
+          onSelectShift={(shift) => {
+            setSelectedShift(shift)
+            setDaySheetOpen(false)
+          }}
+          onClose={() => setDaySheetOpen(false)}
         />
       )}
 
