@@ -528,7 +528,7 @@ export default function SettingsPanel({
             Locations
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div className="note">Show archived jobs</div>
+            <div className="note">Show archived</div>
             <Switch checked={showArchivedJobs} onChange={setShowArchivedJobs} />
           </div>
         </div>
@@ -696,27 +696,29 @@ export default function SettingsPanel({
         )}
 
         {/* Archived locations */}
-        {draft.multiple_locations && archivedAdditional.length > 0 && (
-          <div className="card" style={{ marginTop: 12, padding: 10 }}>
-            <div className="note" style={{ marginBottom: 6 }}>
-              Archived locations
+        {draft.multiple_locations &&
+          showArchivedJobs &&
+          archivedAdditional.length > 0 && (
+            <div className="card" style={{ marginTop: 12, padding: 10 }}>
+              <div className="note" style={{ marginBottom: 6 }}>
+                Archived locations
+              </div>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {archivedAdditional.map((loc) => (
+                  <LocationRow
+                    key={loc.id}
+                    label="Location (archived)"
+                    loc={loc}
+                    disabled
+                    archived
+                    showArchivedJobs
+                    showWeatherFields={!!draft.track_weather}
+                    onToggleArchive={() => toggleArchiveLocation(loc.id)} // Unarchive
+                  />
+                ))}
+              </div>
             </div>
-            <div style={{ display: 'grid', gap: 8 }}>
-              {archivedAdditional.map((loc) => (
-                <LocationRow
-                  key={loc.id}
-                  label="Location (archived)"
-                  loc={loc}
-                  disabled
-                  archived
-                  showArchivedJobs
-                  showWeatherFields={!!draft.track_weather}
-                  onToggleArchive={() => toggleArchiveLocation(loc.id)} // Unarchive
-                />
-              ))}
-            </div>
-          </div>
-        )}
+          )}
       </div>
 
       {/* --- Payout (compact segmented) --- */}
