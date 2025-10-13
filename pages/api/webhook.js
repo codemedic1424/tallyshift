@@ -1,104 +1,51 @@
-// pages/api/webhook.js
-import { buffer } from 'micro'
+// pages/api/stripe-webhook.js
 import Stripe from 'stripe'
-import { createClient } from '@supabase/supabase-js'
-
-export const config = {
-  api: {
-    bodyParser: false, // Stripe needs the raw body
-  },
-}
+import { supabase } from '../../lib/supabase'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-)
+const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).send('Method Not Allowed')
-  }
+  if (req.method !== 'POST') return res.status(405).end('Method Not Allowed')
 
   const sig = req.headers['stripe-signature']
-  const buf = await buffer(req)
 
   let event
   try {
-    event = stripe.webhooks.constructEvent(
-      buf,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET,
-    )
+    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret)
   } catch (err) {
-    console.error('❌ Webhook signature verification failed.', err.message)
+    console.error('Webhook signature error:', err.message)
     return res.status(400).send(`Webhook Error: ${err.message}`)
   }
 
-  try {
-    switch (event.type) {
-      case 'checkout.session.completed': {
-        const session = event.data.object
-        const userId = session.metadata?.userId
-        const planType = session.metadata?.planType || 'pro'
+  // ✅ handle completed checkout
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object
+    const userId = session.metadata?.userId
+    const priceId =
+      session.line_items?.[0]?.price?.id || session.metadata?.priceId
 
-        if (!userId) throw new Error('Missing userId in metadata.')
+    const FOUNDER_PRICE_ID = 'price_1SHoZqQaqUr5y4XCDPBf5kIR'
+    const MONTHLY_PRICE_ID = 'price_1SHoYhQaqUr5y4XCeCPStF1G'
 
-        // Update user in Supabase
-        const { error } = await supabase
-          .from('profiles')
-          .update({
-            plan_tier: planType,
-            subscription_status: 'active',
-          })
-          .eq('id', userId)
+    let newTier = 'free'
+    if (priceId === FOUNDER_PRICE_ID) newTier = 'founder'
+    else if (priceId === MONTHLY_PRICE_ID) newTier = 'pro'
 
-        if (error) throw error
-
-        console.log(`✅ Upgraded user ${userId} to ${planType}`)
-        break
-      }
-
-      case 'invoice.payment_failed': {
-        const invoice = event.data.object
-        const userId = invoice.metadata?.userId
-
-        if (userId) {
-          await supabase
-            .from('profiles')
-            .update({
-              subscription_status: 'payment_failed',
-            })
-            .eq('id', userId)
-          console.log(`⚠️ Payment failed for user ${userId}`)
-        }
-        break
-      }
-
-      case 'customer.subscription.deleted': {
-        const sub = event.data.object
-        const userId = sub.metadata?.userId
-
-        if (userId) {
-          await supabase
-            .from('profiles')
-            .update({
-              plan_tier: 'free',
-              subscription_status: 'canceled',
-            })
-            .eq('id', userId)
-          console.log(`❌ Subscription canceled for user ${userId}`)
-        }
-        break
-      }
-
-      default:
-        console.log(`Unhandled event type: ${event.type}`)
+    if (userId && newTier !== 'free') {
+      await supabase
+        .from('profiles')
+        .update({ plan_tier: newTier })
+        .eq('id', userId)
     }
-
-    res.status(200).json({ received: true })
-  } catch (err) {
-    console.error('Webhook handler error:', err)
-    res.status(500).send('Webhook handler failed')
   }
+
+  res.status(200).json({ received: true })
+}
+
+// Disable body parsing so Stripe can verify the signature
+export const config = {
+  api: {
+    bodyParser: false,
+  },
 }
