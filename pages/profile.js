@@ -37,6 +37,9 @@ export function UpgradeButton() {
 export default function Profile() {
   const { user } = useUser()
 
+  // pro features
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+
   // persisted profile fields
   const [first, setFirst] = useState('')
   const [last, setLast] = useState('')
@@ -708,16 +711,128 @@ export default function Profile() {
             {err ? `Error: ${err}` : msg}
           </div>
         )}
-        {/* Upgrade button */}
+        {/* TallyShift Pro section */}
         <div className="card">
           <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
             TallyShift Pro
           </div>
-          <p className="note" style={{ marginBottom: 8 }}>
-            Unlock advanced features and insights.
-          </p>
-          <UpgradeButton />
+
+          {planTier === 'pro' ||
+          planTier === 'founder' ||
+          user?.pro_override ? (
+            <>
+              <p className="note" style={{ marginBottom: 8 }}>
+                You’re a{' '}
+                <b>{planTier === 'founder' ? 'TallyShift Founder' : 'Pro'}</b>!
+                Enjoy all premium features.
+              </p>
+
+              {/* Show Manage only for real Stripe subs (not founder, not override) */}
+              {planTier === 'pro' && !user?.pro_override && (
+                <button
+                  onClick={async () => {
+                    const res = await fetch(
+                      '/api/create-customer-portal-session',
+                      {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ userId: user.id }),
+                      },
+                    )
+                    const data = await res.json()
+                    window.location.href = data.url
+                  }}
+                  className="btn secondary"
+                >
+                  Manage Subscription
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <p className="note" style={{ marginBottom: 8 }}>
+                Unlock advanced insights and premium features with TallyShift
+                Pro.
+              </p>
+              <button
+                onClick={() => setShowUpgradeModal(true)}
+                className="btn btn-primary"
+              >
+                Upgrade Now
+              </button>
+            </>
+          )}
         </div>
+
+        {/* Upgrade modal */}
+        {showUpgradeModal && (
+          <div
+            className="modal-backdrop"
+            onClick={() => setShowUpgradeModal(false)}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div
+              className="modal-card"
+              onClick={(e) => e.stopPropagation()}
+              style={{ textAlign: 'center', padding: '24px 16px' }}
+            >
+              <div className="h1" style={{ marginBottom: 8 }}>
+                Upgrade to TallyShift Pro
+              </div>
+              <p className="note" style={{ marginBottom: 16 }}>
+                Choose your plan type below:
+              </p>
+              <div
+                style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
+              >
+                <button
+                  className="btn btn-primary"
+                  onClick={async () => {
+                    const res = await fetch('/api/create-checkout-session', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        priceId: 'price_1SHoZqQaqUr5y4XCDPBf5kIR', // replace with live monthly ID
+                        userId: user.id,
+                        isLifetime: false,
+                      }),
+                    })
+                    const data = await res.json()
+                    window.location.href = data.url
+                  }}
+                >
+                  Monthly Subscription – $4.99 / month
+                </button>
+                <button
+                  className="btn secondary"
+                  onClick={async () => {
+                    const res = await fetch('/api/create-checkout-session', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        priceId: 'price_founder_live_XXXX', // replace with live founder one-time ID
+                        userId: user.id,
+                        isLifetime: true,
+                      }),
+                    })
+                    const data = await res.json()
+                    window.location.href = data.url
+                  }}
+                >
+                  Founder Lifetime Access – $49.99 one-time
+                </button>
+                <button
+                  className="btn secondary"
+                  style={{ marginTop: 10 }}
+                  onClick={() => setShowUpgradeModal(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Logout + Delete row — only the buttons are clickable */}
         <div
