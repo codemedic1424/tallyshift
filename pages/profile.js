@@ -793,7 +793,7 @@ export default function Profile() {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
-                        priceId: 'price_1SHoZqQaqUr5y4XCDPBf5kIR', // replace with live monthly ID
+                        priceId: 'price_1SHoYhQaqUr5y4XCeCPStF1G', // replace with live monthly ID
                         userId: user.id,
                         isLifetime: false,
                       }),
@@ -811,7 +811,7 @@ export default function Profile() {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
-                        priceId: 'price_founder_live_XXXX', // replace with live founder one-time ID
+                        priceId: 'price_1SHoZqQaqUr5y4XCDPBf5kIR', // replace with live founder one-time ID
                         userId: user.id,
                         isLifetime: true,
                       }),
