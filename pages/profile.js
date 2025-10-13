@@ -7,6 +7,33 @@ import HeaderBar from '../ui/HeaderBar'
 import TabBar from '../ui/TabBar'
 import SettingsModal from '../ui/SettingsModal'
 
+export function UpgradeButton() {
+  const { user } = useUser()
+
+  const handleUpgrade = async () => {
+    const res = await fetch('/api/create-checkout-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        priceId: 'price_1SHoYhQaqUr5y4XCeCPStF1G', // your real Pro price ID
+        userId: user.id,
+        isLifetime: false,
+      }),
+    })
+    const data = await res.json()
+    window.location.href = data.url
+  }
+
+  return (
+    <button
+      onClick={handleUpgrade}
+      className="rounded-md bg-green-600 px-4 py-2 text-white"
+    >
+      Upgrade to Pro
+    </button>
+  )
+}
+
 export default function Profile() {
   const { user } = useUser()
 
@@ -61,6 +88,8 @@ export default function Profile() {
   const [deleting, setDeleting] = useState(false)
   const [deleteErr, setDeleteErr] = useState(null)
 
+  // plan tier
+  const [planTier, setplanTier] = useState('free')
   // ---------- Load profile (includes avatar_path) ----------
   useEffect(() => {
     if (!user) return
@@ -68,7 +97,7 @@ export default function Profile() {
     ;(async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('first_name,last_name,avatar_path')
+        .select('first_name,last_name,avatar_path,plan_tier,pro_override')
         .eq('id', user.id)
         .single()
       if (!error && data) {
@@ -77,6 +106,13 @@ export default function Profile() {
         setAvatarPath(data.avatar_path || '') // <- key: we store path, not URL
         setTmpFirst(data.first_name || '')
         setTmpLast(data.last_name || '')
+        const tier =
+          data.pro_override === true
+            ? 'pro'
+            : data.plan_tier === 'founder'
+              ? 'founder'
+              : data.plan_tier
+        setplanTier(tier)
       }
     })()
   }, [user])
@@ -278,7 +314,7 @@ export default function Profile() {
 
   return (
     <div className="page">
-      <HeaderBar />
+      <HeaderBar title="Profile" />
       <div className="container" style={{ paddingBottom: 96 }}>
         <div
           className="card"
@@ -348,9 +384,34 @@ export default function Profile() {
                   <div className="avatar-fallback-lg">{initials || '👤'}</div>
                 )}
 
+                {/* ✅ Badge overlay for Pro or Founder */}
+                {(planTier === 'pro' || planTier === 'founder') && (
+                  <div
+                    className={`badge-tier ${planTier}`}
+                    title={
+                      planTier === 'pro'
+                        ? 'TallyShift Pro'
+                        : 'TallyShift Founder'
+                    }
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      className="crown-icon"
+                    >
+                      <path d="M5 16l-1-9 4 3 4-6 4 6 4-3-1 9H5zm0 2h14v2H5v-2z" />
+                    </svg>
+                    <span>{planTier === 'pro' ? 'Pro' : 'Founder'}</span>
+                  </div>
+                )}
+
+                {/* Overlay for upload status */}
                 <div className="avatar-overlay">
                   <span>{uploading ? 'Uploading…' : 'Change'}</span>
                 </div>
+
+                {/* File input */}
                 <input
                   ref={fileRef}
                   type="file"
@@ -360,6 +421,7 @@ export default function Profile() {
                 />
               </div>
 
+              {/* Remove photo button */}
               {(preview || avatarUrl) && (
                 <button
                   type="button"
@@ -367,7 +429,6 @@ export default function Profile() {
                   onClick={async () => {
                     try {
                       setErr(null)
-                      // delete the stored object if we have a path
                       if (avatarPath) {
                         const { error: delErr } = await supabase.storage
                           .from('avatars')
@@ -647,6 +708,16 @@ export default function Profile() {
             {err ? `Error: ${err}` : msg}
           </div>
         )}
+        {/* Upgrade button */}
+        <div className="card">
+          <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
+            TallyShift Pro
+          </div>
+          <p className="note" style={{ marginBottom: 8 }}>
+            Unlock advanced features and insights.
+          </p>
+          <UpgradeButton />
+        </div>
 
         {/* Logout + Delete row — only the buttons are clickable */}
         <div

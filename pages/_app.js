@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/router'
 import { UserProvider, useUser } from '../lib/useUser'
 import { SpeedInsights } from '@vercel/speed-insights/next'
+import Head from 'next/head'
 
 const PUBLIC_ROUTES = ['/login', '/reset', '/reset-sent']
 
@@ -41,13 +42,14 @@ export default function MyApp({ Component, pageProps }) {
   return (
     <UserProvider>
       <AuthGuard>
-        {/* Fixed viewport wrapper so only inner .page scrolls;
-            keep TabBar fixed to the window bottom */}
+        <Head>
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+        </Head>
+
         <div id="app-viewport" className="app-viewport">
           <Component {...pageProps} />
         </div>
 
-        {/* Load once, outside individual pages */}
         <SpeedInsights />
       </AuthGuard>
     </UserProvider>

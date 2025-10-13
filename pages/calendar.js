@@ -401,7 +401,7 @@ export default function CalendarPage({ theme, setTheme }) {
 
   return (
     <div className="page">
-      <HeaderBar />
+      <HeaderBar title="Calendar" />
       <div className="container">
         {/* Header */}
         <div className="cal-header">

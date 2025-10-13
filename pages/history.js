@@ -133,7 +133,7 @@ export default function History() {
 
   return (
     <div className="page">
-      <HeaderBar />
+      <HeaderBar title="History" />
       <div className="container">
         <div className="card">
           <div className="h1">History</div>

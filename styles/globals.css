@@ -531,17 +531,25 @@ html.keyboard-open .tabbar {
 }
 .avatar-overlay {
   position: absolute;
-  bottom: 0;
+  top: 0;
   left: 0;
-  right: 0;
-  background: rgba(0, 0, 0, 0.5);
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.55);
   color: #fff;
-  font-size: 13px;
-  text-align: center;
-  padding: 4px 0;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.25s ease;
+  z-index: 4; /* ⬅️ Lower than the badge (which should be 5 or 6) */
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
+
 .avatar-wrap-lg:hover .avatar-overlay {
   opacity: 1;
 }
@@ -1059,4 +1067,95 @@ main,
 .scroll-area,
 .container {
   padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom));
+}
+.avatar-wrap-lg {
+  position: relative;
+  width: 112px;
+  height: 112px;
+  border-radius: 999px;
+  background: #eef2ff;
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: visible; /* ⬅️ key change: let badge show outside */
+}
+
+.badge-tier {
+  z-index: 6;
+  position: absolute;
+  bottom: -8px; /* push it slightly below the circle */
+  left: 50%; /* center horizontally */
+  transform: translateX(-50%); /* perfectly center it */
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.25);
+  z-index: 5;
+  pointer-events: none;
+}
+
+.badge-tier.pro {
+  background: linear-gradient(90deg, #fbbf24, #f59e0b);
+}
+
+.badge-tier.founder {
+  background: linear-gradient(90deg, #8b5cf6, #3b82f6);
+}
+
+/* Shimmer animation */
+@keyframes shimmer {
+  0% {
+    background-position: -100% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.badge-tier.pro {
+  background: linear-gradient(90deg, #f59e0b, #fbbf24, #f59e0b);
+  background-size: 200% 100%;
+  animation: shimmer 3s linear infinite;
+}
+
+.badge-tier.founder {
+  background: linear-gradient(90deg, #8b5cf6, #3b82f6, #8b5cf6);
+  background-size: 200% 100%;
+  animation: shimmer 3s linear infinite;
+}
+
+.crown-icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* ---------- Header Badge (inline next to title) ---------- */
+.badge-tier-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  background: linear-gradient(90deg, #f59e0b, #fbbf24, #f59e0b);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  animation: shimmer 3s linear infinite;
+  background-size: 200% 100%;
+}
+
+.badge-tier-header.founder {
+  background: linear-gradient(90deg, #8b5cf6, #3b82f6, #8b5cf6);
+  animation: shimmer 3s linear infinite;
+  background-size: 200% 100%;
 }

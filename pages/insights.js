@@ -362,7 +362,7 @@ export default function Insights() {
   // ---------- UI ----------
   return (
     <div className="page">
-      <HeaderBar />
+      <HeaderBar title="Insights" />
       <div className="container" style={{ display: 'grid', gap: 12 }}>
         {/* Controls */}
         <div

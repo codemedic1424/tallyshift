@@ -5,11 +5,6 @@ export default function Document() {
   return (
     <Html lang="en">
       <Head>
-        {/* Lock zoom + support safe areas on iOS */}
-        <meta
-          name="viewport"
-          content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
-        />
         {/* Your existing PWA bits */}
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#0ea5e9" />
