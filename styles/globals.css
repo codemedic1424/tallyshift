@@ -1159,3 +1159,11 @@ main,
   animation: shimmer 3s linear infinite;
   background-size: 200% 100%;
 }
+
+input,
+textarea,
+select {
+  font-size: 16px !important;
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+}

@@ -736,7 +736,6 @@ export default function SettingsPanel({
             { value: 'both', label: 'Cash + Card' },
             { value: 'cash_only', label: 'Cash only' },
             { value: 'card_only', label: 'Card only' },
-            { value: 'on_paycheck', label: 'On paycheck' },
           ]}
           compact
         />

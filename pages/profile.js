@@ -40,6 +40,8 @@ export default function Profile() {
   // pro features
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
 
+  const [editingEmail, setEditingEmail] = useState(false)
+
   // persisted profile fields
   const [first, setFirst] = useState('')
   const [last, setLast] = useState('')
@@ -462,7 +464,7 @@ export default function Profile() {
                 <div className="profile-actions">
                   <button
                     type="button"
-                    className="btn"
+                    className="btn secondary"
                     onClick={() => {
                       setTmpFirst(first)
                       setTmpLast(last)
@@ -531,21 +533,46 @@ export default function Profile() {
           <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
             Email
           </div>
-          <form className="grid" onSubmit={changeEmail}>
-            <input
-              className="input"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-            <button className="btn secondary" type="submit">
-              Update email
-            </button>
-            <div className="note">
-              We’ll send a confirmation to the new address.
-            </div>
-          </form>
+
+          {!editingEmail ? (
+            <>
+              <p className="note" style={{ marginBottom: 8 }}>
+                {email}
+              </p>
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={() => setEditingEmail(true)}
+              >
+                Update email
+              </button>
+            </>
+          ) : (
+            <form className="grid" onSubmit={changeEmail}>
+              <input
+                className="input"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-primary" type="submit">
+                  Send Confirmation
+                </button>
+                <button
+                  type="button"
+                  className="btn secondary"
+                  onClick={() => setEditingEmail(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+              <div className="note">
+                We’ll send a confirmation to the new address.
+              </div>
+            </form>
+          )}
         </div>
 
         {/* Password */}

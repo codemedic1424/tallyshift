@@ -312,7 +312,9 @@ export default function Home() {
           </div>
           {(!user || loading) && <div className="note">Loading…</div>}
           {user && !loading && recent.length === 0 && (
-            <div className="note">No shifts yet. Add your first one!</div>
+            <div className="note">
+              No shifts yet. Click the blue "+" button to add your first one!
+            </div>
           )}
           {recent.map((r) => {
             const net =
@@ -377,9 +379,13 @@ export default function Home() {
           aria-modal="true"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{ padding: '24px 16px', textAlign: 'center' }}
+          >
             <div className="h1" style={{ marginBottom: 8 }}>
-              Finish your profile
+              Complete your profile
             </div>
             <div className="note" style={{ marginBottom: 12 }}>
               Add your name so we can personalize your dashboard.
