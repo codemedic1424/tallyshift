@@ -6,6 +6,7 @@ import { useUser } from '../lib/useUser'
 import HeaderBar from '../ui/HeaderBar'
 import TabBar from '../ui/TabBar'
 import SettingsModal from '../ui/SettingsModal'
+import UpgradeModal from '../ui/UpgradeModal'
 
 export function UpgradeButton() {
   const { user } = useUser()
@@ -791,74 +792,8 @@ export default function Profile() {
           )}
         </div>
 
-        {/* Upgrade modal */}
         {showUpgradeModal && (
-          <div
-            className="modal-backdrop"
-            onClick={() => setShowUpgradeModal(false)}
-            role="dialog"
-            aria-modal="true"
-          >
-            <div
-              className="modal-card"
-              onClick={(e) => e.stopPropagation()}
-              style={{ textAlign: 'center', padding: '24px 16px' }}
-            >
-              <div className="h1" style={{ marginBottom: 8 }}>
-                Upgrade to TallyShift Pro
-              </div>
-              <p className="note" style={{ marginBottom: 16 }}>
-                Choose your plan type below:
-              </p>
-              <div
-                style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
-              >
-                <button
-                  className="btn btn-primary"
-                  onClick={async () => {
-                    const res = await fetch('/api/create-checkout-session', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        priceId: 'price_1SHoYhQaqUr5y4XCeCPStF1G', // replace with live monthly ID
-                        userId: user.id,
-                        isLifetime: false,
-                      }),
-                    })
-                    const data = await res.json()
-                    window.location.href = data.url
-                  }}
-                >
-                  Monthly Subscription – $4.99 / month
-                </button>
-                <button
-                  className="btn secondary"
-                  onClick={async () => {
-                    const res = await fetch('/api/create-checkout-session', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        priceId: 'price_1SHoZqQaqUr5y4XCDPBf5kIR', // replace with live founder one-time ID
-                        userId: user.id,
-                        isLifetime: true,
-                      }),
-                    })
-                    const data = await res.json()
-                    window.location.href = data.url
-                  }}
-                >
-                  Founder Lifetime Access – $49.99 one-time
-                </button>
-                <button
-                  className="btn secondary"
-                  style={{ marginTop: 10 }}
-                  onClick={() => setShowUpgradeModal(false)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
+          <UpgradeModal onClose={() => setShowUpgradeModal(false)} />
         )}
 
         {/* Logout + Delete row — only the buttons are clickable */}

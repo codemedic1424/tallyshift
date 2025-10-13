@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useUser } from '../lib/useUser'
 import { useSettings } from '../lib/useSettings'
+import UpgradeModal from './UpgradeModal'
 
 /* ---------------- utils (unchanged behavior) ---------------- */
 
@@ -240,11 +241,12 @@ export default function SettingsPanel({
 }) {
   const { user } = useUser()
   const { settings, saveSettings, loading, error } = useSettings()
-
   const [draft, setDraft] = useState(null)
   const [saving, setSaving] = useState(false)
   const [highlightChanges, setHighlightChanges] = useState(false)
   const [showArchivedJobs, setShowArchivedJobs] = useState(false)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const planTier = user?.plan_tier || user?.tier || 'free'
 
   useEffect(() => {
     if (!settings) return
@@ -540,18 +542,57 @@ export default function SettingsPanel({
           </div>
           <div
             style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr auto',
+              display: 'flex',
               alignItems: 'center',
+              justifyContent: 'space-between',
               gap: 8,
+              flexWrap: 'wrap',
             }}
           >
-            <div>Track weather for each shift (store daily snapshot)</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>Track weather for each shift</span>
+              <span
+                style={{
+                  padding: '2px 8px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  borderRadius: '999px',
+                  background:
+                    planTier === 'pro' || planTier === 'founder'
+                      ? '#facc15'
+                      : '#e5e7eb',
+                  color:
+                    planTier === 'pro' || planTier === 'founder'
+                      ? '#1f2937'
+                      : '#6b7280',
+                  border: '1px solid #d1d5db',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.3px',
+                }}
+              >
+                Pro
+              </span>
+            </div>
+
             <Switch
               checked={!!draft.track_weather}
-              onChange={(v) => setField('track_weather', v)}
+              disabled={false} // never truly disable it
+              onChange={(v) => {
+                const entitled =
+                  ['pro', 'founder'].includes(user?.plan_tier) ||
+                  user?.pro_override
+
+                if (!entitled) {
+                  setShowUpgradeModal(true)
+                  return
+                }
+
+                setField('track_weather', v)
+              }}
+              title="Track weather"
             />
           </div>
+
           <div className="note" style={{ marginTop: 6 }}>
             Requires an address per active location (we’ll look up coordinates
             automatically).
@@ -603,14 +644,50 @@ export default function SettingsPanel({
             }}
           >
             <div style={{ display: 'grid', gap: 4 }}>
-              <div style={{ fontWeight: 700 }}>Track multiple locations?</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ fontWeight: 700 }}>Track multiple locations?</div>
+                {/* PRO pill */}
+                <span
+                  style={{
+                    padding: '2px 8px',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    borderRadius: '999px',
+                    background:
+                      planTier === 'pro' || planTier === 'founder'
+                        ? '#facc15'
+                        : '#e5e7eb',
+                    color:
+                      planTier === 'pro' || planTier === 'founder'
+                        ? '#1f2937'
+                        : '#6b7280',
+                    border: '1px solid #d1d5db',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.3px',
+                  }}
+                >
+                  Pro
+                </span>
+              </div>
               <div className="note">
                 Enable to add more locations and pick a default.
               </div>
             </div>
+
             <Switch
               checked={!!draft.multiple_locations}
-              onChange={(v) => setField('multiple_locations', v)}
+              disabled={false} // keep interactive so they can click it
+              onChange={(v) => {
+                const entitled =
+                  planTier === 'pro' ||
+                  planTier === 'founder' ||
+                  user?.pro_override
+                if (!entitled) {
+                  setShowUpgradeModal(true)
+                  return
+                }
+                setField('multiple_locations', v)
+              }}
               title="Multiple locations"
             />
           </div>
@@ -620,7 +697,11 @@ export default function SettingsPanel({
               <label className="field" style={{ maxWidth: 360 }}>
                 <span className="field-label">Default location</span>
                 <select
-                  className={`input ${highlightChanges && changed('default_location_id') ? 'field-changed' : ''}`}
+                  className={`input ${
+                    highlightChanges && changed('default_location_id')
+                      ? 'field-changed'
+                      : ''
+                  }`}
                   value={
                     (draft.default_location_id ??
                       (primary ? primary.id : '')) ||
@@ -881,6 +962,9 @@ export default function SettingsPanel({
           {saving ? 'Saving…' : 'Save'}
         </button>
       </div>
+      {showUpgradeModal && (
+        <UpgradeModal onClose={() => setShowUpgradeModal(false)} />
+      )}
     </div>
   )
 }

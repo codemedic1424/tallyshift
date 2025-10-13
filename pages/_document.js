@@ -10,7 +10,7 @@ export default function Document() {
         <meta name="theme-color" content="#0ea5e9" />
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
         {/* iOS: run as standalone & control status bar */}
-        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta
           name="viewport"
