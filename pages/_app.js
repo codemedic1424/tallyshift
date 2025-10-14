@@ -12,7 +12,6 @@ function AuthGuard({ children }) {
   const router = useRouter()
   const { user, loading } = useUser()
 
-  // Redirect to /login for private routes
   useEffect(() => {
     if (loading) return
     const isPublic = PUBLIC_ROUTES.includes(router.pathname)
@@ -24,13 +23,48 @@ function AuthGuard({ children }) {
   if (loading) return <div style={{ padding: 24 }}>Loading…</div>
 
   const isPublic = PUBLIC_ROUTES.includes(router.pathname)
-  if (!isPublic && !user) return null // prevent flicker during redirect
+  if (!isPublic && !user) return null
 
   return children
 }
 
+// 👇 The badge component
+function EnvironmentBadge() {
+  const env = process.env.NEXT_PUBLIC_ENV
+  if (env === 'production') return null
+
+  const bg =
+    env === 'development'
+      ? '#e63946' // red
+      : env === 'staging'
+        ? '#ff9800' // orange
+        : '#6c757d' // gray fallback
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: '0.75rem',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        background: bg,
+        color: '#fff',
+        padding: '6px 12px',
+        borderRadius: '8px',
+        fontSize: '0.8rem',
+        fontWeight: 'bold',
+        boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+        zIndex: 2147483647,
+        pointerEvents: 'none',
+        opacity: 0.95,
+      }}
+    >
+      {env ? env.toUpperCase() : 'DEV'} MODE
+    </div>
+  )
+}
+
 export default function MyApp({ Component, pageProps }) {
-  // (Optional) one-time cleanup from earlier experiments
   useEffect(() => {
     try {
       Object.keys(localStorage)
@@ -48,6 +82,8 @@ export default function MyApp({ Component, pageProps }) {
 
         <div id="app-viewport" className="app-viewport">
           <Component {...pageProps} />
+          {/* 👇 Add this line inside your main container */}
+          <EnvironmentBadge />
         </div>
 
         <SpeedInsights />
