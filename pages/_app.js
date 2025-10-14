@@ -56,7 +56,7 @@ function EnvironmentBadge() {
         boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
         zIndex: 2147483647,
         pointerEvents: 'none',
-        opacity: 0.95,
+        opacity: 0.15,
       }}
     >
       {env ? env.toUpperCase() : 'DEV'} MODE
@@ -65,6 +65,16 @@ function EnvironmentBadge() {
 }
 
 export default function MyApp({ Component, pageProps }) {
+  const router = useRouter() // ✅ add this
+
+  // 🧩 Dynamically load Tailwind only for /manager pages
+  useEffect(() => {
+    if (router.pathname.startsWith('/manager')) {
+      import('../styles/manager.css')
+    }
+  }, [router.pathname])
+
+  // 🧹 Cleanup for old Supabase session keys
   useEffect(() => {
     try {
       Object.keys(localStorage)
@@ -82,7 +92,6 @@ export default function MyApp({ Component, pageProps }) {
 
         <div id="app-viewport" className="app-viewport">
           <Component {...pageProps} />
-          {/* 👇 Add this line inside your main container */}
           <EnvironmentBadge />
         </div>
 

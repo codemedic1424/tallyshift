@@ -1,12 +1,6 @@
-/* =========================================
-   TallyShift — Globals (cleaned & de-duplicated)
-   -------------------------------------------------
-   Notes:
-   • Single source of truth for tokens & heights
-   • One tab bar block, one modal block
-   • Page owns scrolling; body only locks when .modal-open
-   • Inputs can shrink in flex/grid rows (fixes iOS date overflow)
-   ========================================= */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 /* ---------- Tokens / Theme ---------- */
 :root {
