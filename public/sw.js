@@ -10,10 +10,15 @@ self.addEventListener('install', (event) => {
     })(),
   )
 })
+
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
 })
+
 self.addEventListener('fetch', (event) => {
+  // ✅ Only handle GET requests — skip POST, PUT, DELETE, etc.
+  if (event.request.method !== 'GET') return
+
   event.respondWith(
     (async () => {
       try {
