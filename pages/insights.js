@@ -473,74 +473,76 @@ export default function Insights() {
           </div>
         </div>
 
-        {/* Cash vs Card */}
-        <div className="card">
-          <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
-            Cash vs Card ({tfLabel})
-          </div>
-          {totalTips === 0 ? (
-            <div className="note">No tips recorded.</div>
-          ) : (
-            <div style={{ display: 'grid', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div className="note" style={{ width: 64 }}>
-                  Cash
-                </div>
-                <div
-                  style={{
-                    flex: 1,
-                    height: 10,
-                    background: '#e5e7eb',
-                    borderRadius: 6,
-                    overflow: 'hidden',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: `${cashPct}%`,
-                      height: '100%',
-                      background: '#10b981',
-                    }}
-                  />
-                </div>
-                <div
-                  className="note"
-                  style={{ width: 120, textAlign: 'right' }}
-                >
-                  {currencyFormatter.format(curCash)} ({cashPct.toFixed(0)}%)
-                </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div className="note" style={{ width: 64 }}>
-                  Card
-                </div>
-                <div
-                  style={{
-                    flex: 1,
-                    height: 10,
-                    background: '#e5e7eb',
-                    borderRadius: 6,
-                    overflow: 'hidden',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: `${cardPct}%`,
-                      height: '100%',
-                      background: '#3b82f6',
-                    }}
-                  />
-                </div>
-                <div
-                  className="note"
-                  style={{ width: 120, textAlign: 'right' }}
-                >
-                  {currencyFormatter.format(curCard)} ({cardPct.toFixed(0)}%)
-                </div>
-              </div>
+        {/* Cash vs Card — only show if both are tracked */}
+        {payoutMode === 'both' && (
+          <div className="card">
+            <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
+              Cash vs Card ({tfLabel})
             </div>
-          )}
-        </div>
+            {totalTips === 0 ? (
+              <div className="note">No tips recorded.</div>
+            ) : (
+              <div style={{ display: 'grid', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div className="note" style={{ width: 64 }}>
+                    Cash
+                  </div>
+                  <div
+                    style={{
+                      flex: 1,
+                      height: 10,
+                      background: '#e5e7eb',
+                      borderRadius: 6,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${cashPct}%`,
+                        height: '100%',
+                        background: '#10b981',
+                      }}
+                    />
+                  </div>
+                  <div
+                    className="note"
+                    style={{ width: 120, textAlign: 'right' }}
+                  >
+                    {currencyFormatter.format(curCash)} ({cashPct.toFixed(0)}%)
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div className="note" style={{ width: 64 }}>
+                    Card
+                  </div>
+                  <div
+                    style={{
+                      flex: 1,
+                      height: 10,
+                      background: '#e5e7eb',
+                      borderRadius: 6,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${cardPct}%`,
+                        height: '100%',
+                        background: '#3b82f6',
+                      }}
+                    />
+                  </div>
+                  <div
+                    className="note"
+                    style={{ width: 120, textAlign: 'right' }}
+                  >
+                    {currencyFormatter.format(curCard)} ({cardPct.toFixed(0)}%)
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Day-of-week performance */}
         <div className="card">
@@ -591,6 +593,134 @@ export default function Insights() {
             </div>
           )}
         </div>
+        {/* Weather Breakdown — Pro only */}
+        {(user?.plan_tier === 'pro' || user?.plan_tier === 'founder') &&
+          settings?.track_weather && (
+            <div className="card">
+              <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
+                Weather breakdown ({tfLabel})
+              </div>
+              {rows.every((r) => !r.weather_snapshot) ? (
+                <div className="note">
+                  No weather data found for this range yet.
+                </div>
+              ) : (
+                (() => {
+                  // Aggregate by weather summary
+                  const agg = {}
+                  for (const r of rows) {
+                    const snap = r.weather_snapshot
+                    if (!snap?.summary) continue
+                    const key = snap.summary
+                    const net =
+                      Number(r.cash_tips || 0) +
+                      Number(r.card_tips || 0) -
+                      Number(r.tip_out_total || 0)
+                    if (!agg[key]) agg[key] = { count: 0, sumNet: 0 }
+                    agg[key].count++
+                    agg[key].sumNet += net
+                  }
+                  const entries = Object.entries(agg).sort(
+                    (a, b) => b[1].count - a[1].count,
+                  )
+                  if (entries.length === 0)
+                    return (
+                      <div className="note">No weather data available.</div>
+                    )
+                  return (
+                    <div style={{ display: 'grid', gap: 8 }}>
+                      {entries.map(([summary, stats]) => (
+                        <div
+                          key={summary}
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: '1fr auto auto',
+                            alignItems: 'center',
+                            gap: 8,
+                          }}
+                        >
+                          <div>{summary}</div>
+                          <div className="note">{stats.count} shifts</div>
+                          <div className="note">
+                            {currencyFormatter.format(
+                              stats.sumNet / stats.count,
+                            )}{' '}
+                            avg
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()
+              )}
+            </div>
+          )}
+        {/* Location Breakdown — Pro only */}
+        {(user?.plan_tier === 'pro' || user?.plan_tier === 'founder') &&
+          settings?.multiple_locations && (
+            <div className="card">
+              <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
+                Location breakdown ({tfLabel})
+              </div>
+              {rows.every((r) => !r.location_id) ? (
+                <div className="note">
+                  No location data found for this range yet.
+                </div>
+              ) : (
+                (() => {
+                  // Build quick lookup of location_id → name from settings
+                  const locMap = {}
+                  if (Array.isArray(settings?.locations)) {
+                    for (const loc of settings.locations) {
+                      locMap[loc.id] = loc.name || '(Unnamed)'
+                    }
+                  }
+
+                  // Aggregate by location_id
+                  const agg = {}
+                  for (const r of rows) {
+                    const locId = r.location_id || 'unknown'
+                    const locName = locMap[locId] || 'Unknown location'
+                    const net =
+                      Number(r.cash_tips || 0) +
+                      Number(r.card_tips || 0) -
+                      Number(r.tip_out_total || 0)
+                    if (!agg[locId])
+                      agg[locId] = { name: locName, count: 0, sumNet: 0 }
+                    agg[locId].count++
+                    agg[locId].sumNet += net
+                  }
+
+                  const entries = Object.values(agg).sort(
+                    (a, b) => b.sumNet - a.sumNet,
+                  )
+
+                  return (
+                    <div style={{ display: 'grid', gap: 8 }}>
+                      {entries.map((loc) => (
+                        <div
+                          key={loc.name}
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: '1fr auto auto',
+                            alignItems: 'center',
+                            gap: 8,
+                          }}
+                        >
+                          <div>{loc.name}</div>
+                          <div className="note">{loc.count} shifts</div>
+                          <div className="note">
+                            {currencyFormatter.format(loc.sumNet / loc.count)}{' '}
+                            avg
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()
+              )}
+            </div>
+          )}
 
         {/* Top keywords from notes */}
         <div className="card">

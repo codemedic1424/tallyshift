@@ -1167,3 +1167,13 @@ select {
   touch-action: manipulation;
   -webkit-text-size-adjust: 100%;
 }
+
+.btn[disabled],
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: #e5e7eb; /* light gray */
+  color: #6b7280; /* muted text */
+  border-color: #d1d5db; /* soft border */
+  box-shadow: none;
+}

@@ -248,6 +248,34 @@ export default function SettingsPanel({
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const planTier = user?.plan_tier || user?.tier || 'free'
 
+  // Auto-disable paid features + auto-save if user downgrades
+  useEffect(() => {
+    if (!draft) return
+
+    const entitled = ['pro', 'founder'].includes(planTier) || user?.pro_override
+
+    // If user no longer entitled, reset and auto-save
+    if (!entitled && (draft.track_weather || draft.multiple_locations)) {
+      const updated = {
+        ...draft,
+        track_weather: false,
+        multiple_locations: false,
+      }
+
+      setDraft(updated)
+
+      // Persist the change silently (no "Saving…" UI)
+      ;(async () => {
+        try {
+          await saveSettings(updated)
+          console.log('🔄 Auto-saved: downgraded plan reset features off.')
+        } catch (err) {
+          console.warn('Auto-save after downgrade failed:', err.message)
+        }
+      })()
+    }
+  }, [planTier, user?.pro_override, draft])
+
   useEffect(() => {
     if (!settings) return
     setDraft(initFromSettings(settings))
