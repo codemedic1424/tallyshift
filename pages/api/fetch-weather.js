@@ -30,11 +30,11 @@ export default async function handler(req, res) {
     if (!(reqDate instanceof Date) || isNaN(reqDate)) {
       return res.status(400).json({ ok: false, error: 'Invalid date' })
     }
-    if (reqDate >= today) {
+    if (reqDate > today) {
       return res.status(200).json({
         ok: true,
         snapshot: null,
-        reason: 'Date is today or in the future; skipping weather snapshot.',
+        reason: 'Date is in the future; skipping weather snapshot.',
       })
     }
 
@@ -52,13 +52,11 @@ export default async function handler(req, res) {
     const url = `https://archive-api.open-meteo.com/v1/archive?${params.toString()}`
     const r = await fetch(url)
     if (!r.ok) {
-      return res
-        .status(502)
-        .json({
-          ok: false,
-          error: 'Upstream weather API error',
-          status: r.status,
-        })
+      return res.status(502).json({
+        ok: false,
+        error: 'Upstream weather API error',
+        status: r.status,
+      })
     }
     const data = await r.json()
 

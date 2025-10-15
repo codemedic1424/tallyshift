@@ -12,7 +12,13 @@ export default function DaySheetModal({
   if (!open) return null
 
   const S = { times: '\u00D7', middot: '\u00B7' }
-  const dayLabel = new Date(date).toLocaleDateString()
+  function parseDateOnlyLocal(s) {
+    if (!s) return new Date(NaN)
+    const [y, m, d] = String(s).split('-').map(Number)
+    return new Date(y, (m || 1) - 1, d || 1)
+  }
+
+  const dayLabel = parseDateOnlyLocal(date).toLocaleDateString()
 
   return (
     <div
@@ -36,7 +42,7 @@ export default function DaySheetModal({
         <div className="modal-body">
           <button
             className="btn btn-primary add-btn"
-            onClick={() => onAdd(new Date(date))}
+            onClick={() => onAdd(parseDateOnlyLocal(date))}
           >
             + Add shift
           </button>
