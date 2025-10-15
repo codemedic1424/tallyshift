@@ -7,6 +7,37 @@ import { supabase } from '../lib/supabase'
 import HeaderBar from '../ui/HeaderBar'
 import TabBar from '../ui/TabBar'
 import ShiftDetailsModal from '../ui/ShiftDetailsModal'
+import PaceSettingsModal from '../ui/PaceSettingsModal'
+import { useSpring, animated } from '@react-spring/web'
+
+function AnimatedNumber({ value, formatter }) {
+  const [done, setDone] = useState(false)
+
+  const { val } = useSpring({
+    from: { val: 0 },
+    to: { val: value },
+    config: { mass: 1, tension: 90, friction: 35 },
+    onRest: () => {
+      setDone(true)
+      setTimeout(() => setDone(true))
+    },
+  })
+
+  return (
+    <animated.span
+      style={{
+        display: 'inline-block',
+        transition: 'all 0.8s ease',
+        transform: done ? 'scale(1.20)' : 'scale(1)',
+        color: done ? '#22c55e' : 'inherit',
+        textShadow: done ? '0 0 10px rgba(34,197,94,0.4)' : 'none',
+        fontSize: done ? '1.15em' : '1em', // adds that little size pop
+      }}
+    >
+      {val.to((v) => (formatter ? formatter(v) : v.toFixed(2)))}
+    </animated.span>
+  )
+}
 
 // ---- date utils (local-safe) ----
 function parseDateOnlyLocal(s) {
@@ -67,6 +98,139 @@ const TF = {
   THIS_MONTH: 'this_month',
   LAST_3: 'last_3',
   YTD: 'ytd',
+}
+// ---- PaceCard ----
+function PaceCard({ rows, currencyFormatter, settings }) {
+  const [open, setOpen] = useState(false)
+  const [paceType, setPaceType] = useState('monthly')
+  const [expectedShifts, setExpectedShifts] = useState(20)
+
+  // Load saved prefs
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const savedType = localStorage.getItem('pace_type')
+    const savedShifts = Number(localStorage.getItem('pace_expected_shifts'))
+    if (savedType === 'weekly' || savedType === 'monthly')
+      setPaceType(savedType)
+    if (!Number.isNaN(savedShifts) && savedShifts > 0) {
+      setExpectedShifts(savedShifts)
+    }
+  }, [])
+
+  // Determine week start
+  const weekStartsOnMonday = settings?.week_start === 'monday'
+  const today = new Date()
+  let relevantShifts = rows
+
+  if (paceType === 'weekly') {
+    const currentDay = today.getDay()
+    const offset = weekStartsOnMonday ? currentDay - 1 : currentDay
+    const startOfWeek = new Date(today)
+    startOfWeek.setDate(today.getDate() - (offset < 0 ? 6 : offset))
+    const startIso = startOfWeek.toISOString().split('T')[0]
+    relevantShifts = rows.filter((r) => r.date >= startIso)
+  } else {
+    const month = today.getMonth()
+    const year = today.getFullYear()
+    relevantShifts = rows.filter((r) => {
+      const d = parseDateOnlyLocal(r.date)
+      return d.getMonth() === month && d.getFullYear() === year
+    })
+  }
+
+  const totalNet = relevantShifts.reduce(
+    (a, r) =>
+      a +
+      (Number(r.cash_tips || 0) +
+        Number(r.card_tips || 0) -
+        Number(r.tip_out_total || 0)),
+    0,
+  )
+  const shiftCount = relevantShifts.length
+  const avgPerShift = shiftCount > 0 ? totalNet / shiftCount : 0
+  const projectedTotal = avgPerShift * expectedShifts
+
+  const title = paceType === 'weekly' ? 'Weekly Pace' : 'Monthly Pace'
+
+  return (
+    <>
+      <div
+        className="card pace-card"
+        onClick={() => setOpen(true)}
+        role="button"
+        tabIndex={0}
+      >
+        <div className="edit-gear">
+          <span className="gear-icon">⚙</span>
+        </div>
+
+        <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
+          {title}
+        </div>
+
+        {shiftCount === 0 ? (
+          <div className="note">No shifts recorded yet.</div>
+        ) : (
+          <>
+            <div className="note" style={{ marginBottom: 6 }}>
+              {shiftCount} shift{shiftCount === 1 ? '' : 's'} so far
+            </div>
+            <div className="h1" style={{ marginBottom: 4 }}>
+              On pace for {currencyFormatter.format(projectedTotal)}
+            </div>
+            <div className="note">
+              Avg/shift {currencyFormatter.format(avgPerShift)} ·{' '}
+              {expectedShifts} expected {paceType === 'weekly' ? '/wk' : '/mo'}
+            </div>
+          </>
+        )}
+      </div>
+
+      <PaceSettingsModal
+        open={open}
+        onClose={() => setOpen(false)}
+        paceType={paceType}
+        setPaceType={setPaceType}
+        expectedShifts={expectedShifts}
+        setExpectedShifts={setExpectedShifts}
+      />
+
+      {/* Scoped styles for this card */}
+      <style jsx>{`
+        .pace-card {
+          position: relative;
+          cursor: pointer;
+          transition:
+            transform 0.1s ease,
+            box-shadow 0.1s ease;
+        }
+        .pace-card:active {
+          transform: scale(0.98);
+        }
+        .edit-gear {
+          box-shadow: 0 2px 8px rgba(34, 197, 94, 0.25);
+          position: absolute;
+          top: 10px;
+          right: 10px;
+          background: #ffffff;
+          border-radius: 50%;
+          width: 32px;
+          height: 32px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+          border: 1px solid rgba(0, 0, 0, 0.08);
+          pointer-events: none; /* ensures clicks still open the card */
+        }
+        .gear-icon {
+          font-size: 16px;
+          color: #4b5563;
+          opacity: 0.9;
+        }
+      `}</style>
+    </>
+  )
 }
 
 export default function Insights() {
@@ -400,63 +564,73 @@ export default function Insights() {
           </div>
         </div>
 
-        {/* KPIs */}
-        <div className="three grid" style={{ gap: 12 }}>
-          <div className="card kpi kpi-wide">
-            <div className="note">Net tips ({tfLabel})</div>
-            <div className="h1">{currencyFormatter.format(curNet)}</div>
-            {netDeltaPct != null && (
-              <div
-                className="note"
-                style={{ color: netDeltaPct >= 0 ? '#16a34a' : '#dc2626' }}
-              >
-                {netDeltaPct >= 0 ? '▲' : '▼'}{' '}
-                {Math.abs(netDeltaPct).toFixed(1)}% vs previous period
-              </div>
-            )}
+        {/* Combined KPI Card */}
+        <div className="card kpi-summary">
+          <div
+            className="h1"
+            style={{
+              fontSize: 16,
+              marginBottom: 10,
+              textAlign: 'center',
+              fontWeight: 600,
+            }}
+          >
+            Performance Summary ({tfLabel})
           </div>
-          <div className="card kpi">
-            <div className="note">Hours ({tfLabel})</div>
-            <div className="h1">{curHours.toFixed(1)}</div>
-          </div>
-          <div className="card kpi kpi-wide">
-            <div className="note">Effective hourly ({tfLabel})</div>
-            <div className="h1">{currencyFormatter.format(curEff)} /h</div>
-            {effDeltaPct != null && (
-              <div
-                className="note"
-                style={{ color: effDeltaPct >= 0 ? '#16a34a' : '#dc2626' }}
-              >
-                {effDeltaPct >= 0 ? '▲' : '▼'}{' '}
-                {Math.abs(effDeltaPct).toFixed(1)}% vs previous period
+
+          <div className="kpi-grid">
+            <div className="kpi-item">
+              <div className="note">Net tips</div>
+              <div className="h1">
+                <AnimatedNumber
+                  value={curNet}
+                  formatter={currencyFormatter.format}
+                />
               </div>
-            )}
+
+              {netDeltaPct != null && (
+                <div
+                  className="note delta"
+                  style={{ color: netDeltaPct >= 0 ? '#16a34a' : '#dc2626' }}
+                >
+                  {netDeltaPct >= 0 ? '▲' : '▼'}{' '}
+                  {Math.abs(netDeltaPct).toFixed(1)}%
+                </div>
+              )}
+            </div>
+
+            <div className="divider" />
+
+            <div className="kpi-item">
+              <div className="note">Hours</div>
+              <div className="h1">{curHours.toFixed(1)}</div>
+            </div>
+
+            <div className="divider" />
+
+            <div className="kpi-item">
+              <div className="note">Effective hourly</div>
+              <div className="h1">{currencyFormatter.format(curEff)} /h</div>
+              {effDeltaPct != null && (
+                <div
+                  className="note delta"
+                  style={{ color: effDeltaPct >= 0 ? '#16a34a' : '#dc2626' }}
+                >
+                  {effDeltaPct >= 0 ? '▲' : '▼'}{' '}
+                  {Math.abs(effDeltaPct).toFixed(1)}%
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Pace + Sparkline */}
         <div className="two grid" style={{ gap: 12 }}>
-          <div className="card">
-            <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
-              Monthly pace
-            </div>
-            {!showProjection ? (
-              <div className="note">Projection available on “This month”.</div>
-            ) : (
-              <>
-                <div className="note" style={{ marginBottom: 6 }}>
-                  Day {paceDay} of {paceDaysTotal}
-                </div>
-                <div className="h1" style={{ marginBottom: 4 }}>
-                  On pace for {currencyFormatter.format(projectedNet || 0)}
-                </div>
-                <div className="note">
-                  Avg/day so far:{' '}
-                  {currencyFormatter.format(curNet / (paceDay || 1) || 0)}
-                </div>
-              </>
-            )}
-          </div>
+          <PaceCard
+            rows={rows}
+            currencyFormatter={currencyFormatter}
+            settings={settings}
+          />
 
           <div className="card">
             <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
@@ -837,6 +1011,49 @@ export default function Insights() {
       )}
 
       {/* Inline styles for KPI layout & overflow handling */}
+      {/* Combined KPI styles */}
+      <style jsx>{`
+        .kpi-summary {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .kpi-grid {
+          display: flex;
+          justify-content: space-around;
+          align-items: stretch;
+          text-align: center;
+          flex-wrap: wrap;
+          gap: 12px;
+        }
+        .kpi-item {
+          flex: 1;
+          min-width: 100px;
+        }
+        .divider {
+          width: 1px;
+          background: #e5e7eb;
+        }
+        @media (max-width: 600px) {
+          .kpi-grid {
+            flex-direction: column;
+          }
+          .divider {
+            height: 1px;
+            width: 100%;
+          }
+        }
+      `}</style>
+
+      {/* Inline styles for KPI layout & overflow handling */}
+      <style jsx>{`
+  /* Responsive KPI grid: 3 → 2 → 1 columns */
+  :global(.grid.three) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  ...
+`}</style>
+
       <style jsx>{`
         /* Responsive KPI grid: 3 → 2 → 1 columns */
         :global(.grid.three) {
@@ -876,6 +1093,92 @@ export default function Insights() {
           :global(.card.kpi .h1) {
             font-size: 18px;
           }
+        }
+      `}</style>
+      {/* --- Insights “Pro” Styling --- */}
+      <style jsx>{`
+        /* Beautiful gradient background only for Insights page */
+        :global(.page) {
+          background: radial-gradient(
+            circle at top right,
+            #f3f4f6 0%,
+            #ffffff 60%
+          );
+        }
+
+        /* Softer, cleaner card look */
+        :global(.page .card) {
+          background: linear-gradient(145deg, #ffffff, #f9fafb);
+          border: 1px solid #f1f1f1;
+          border-radius: 16px;
+          box-shadow:
+            0 1px 3px rgba(0, 0, 0, 0.05),
+            0 6px 16px rgba(0, 0, 0, 0.08);
+          transition:
+            transform 0.15s ease,
+            box-shadow 0.15s ease;
+        }
+        :global(.page .card:hover) {
+          transform: translateY(-3px);
+          box-shadow:
+            0 4px 8px rgba(0, 0, 0, 0.08),
+            0 10px 24px rgba(0, 0, 0, 0.12);
+        }
+
+        /* Accent bar on card titles */
+        :global(.page .card .h2) {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        :global(.page .card .h2)::before {
+          content: '';
+          width: 5px;
+          height: 18px;
+          border-radius: 2px;
+          background: var(--brand, #22c55e);
+          display: inline-block;
+        }
+
+        /* Page typography */
+        :global(.page) {
+          font-family:
+            'Inter',
+            -apple-system,
+            BlinkMacSystemFont,
+            'Segoe UI',
+            Roboto,
+            sans-serif;
+          letter-spacing: -0.01em;
+        }
+
+        /* Subtle lift for buttons */
+        :global(.page .btn) {
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+          transition:
+            transform 0.1s ease,
+            box-shadow 0.15s ease;
+        }
+        :global(.page .btn:active) {
+          transform: scale(0.97);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+        }
+
+        /* Animated gear icon */
+        :global(.gear-icon) {
+          transition: transform 0.4s ease;
+        }
+        :global(.pace-card:active .gear-icon) {
+          transform: rotate(180deg);
+        }
+
+        /* KPI summary polish */
+        :global(.page .kpi-summary) {
+          background: #ffffffb3;
+          border: 1px solid #e5e7eb;
+          border-radius: 16px;
+          padding: 16px;
+          backdrop-filter: blur(6px);
         }
       `}</style>
     </div>
