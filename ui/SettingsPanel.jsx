@@ -1275,6 +1275,7 @@ function LocationRow({
         }
         .chips {
           display: flex;
+          flex-direction: column;
           gap: 8px;
           align-items: center;
         }

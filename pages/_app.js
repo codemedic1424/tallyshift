@@ -67,13 +67,6 @@ function EnvironmentBadge() {
 export default function MyApp({ Component, pageProps }) {
   const router = useRouter() // ✅ add this
 
-  // 🧩 Dynamically load Tailwind only for /manager pages
-  useEffect(() => {
-    if (router.pathname.startsWith('/manager')) {
-      import('../styles/manager.css')
-    }
-  }, [router.pathname])
-
   // 🧹 Cleanup for old Supabase session keys
   useEffect(() => {
     try {

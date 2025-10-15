@@ -132,7 +132,7 @@ export default function ShiftDetailsModal({
                   </div>
                 </div>
                 <div>
-                  <div className="note">Eff.</div>
+                  <div className="note">Hourly</div>
                   <div className="h2">{currencyFormatter.format(eff)} /h</div>
                 </div>
               </div>
@@ -412,7 +412,7 @@ export default function ShiftDetailsModal({
             onClick={() => setConfirmingDelete(false)}
           >
             <div className="confirm-card" onClick={(e) => e.stopPropagation()}>
-              <h3>Delete this shift?</h3>
+              <h2>Delete this shift?</h2>
               <p>This can’t be undone.</p>
               <div className="actions">
                 <button
