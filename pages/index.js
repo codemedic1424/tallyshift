@@ -173,7 +173,7 @@ export default function Home() {
             </div>
             <div className="hero-sub">{monthLabel}</div>
           </div>
-          {avatarUrl && (
+          {avatarUrl ? (
             <img
               src={avatarUrl}
               alt="User Avatar"
@@ -182,6 +182,14 @@ export default function Home() {
               height={72}
               onClick={() => router.push('/profile')}
             />
+          ) : (
+            <div
+              className="hero-avatar-fallback"
+              onClick={() => router.push('/profile')}
+            >
+              {profile?.first_name?.[0]?.toUpperCase() || ''}
+              {profile?.last_name?.[0]?.toUpperCase() || ''}
+            </div>
           )}
         </div>
       </div>
@@ -336,6 +344,28 @@ export default function Home() {
         }
         .stat-block {
           width: 100%;
+        }
+        .hero-avatar-fallback {
+          width: 72px;
+          height: 72px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #2563eb, #3b82f6);
+          color: white;
+          font-weight: 700;
+          font-size: 24px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          border: 3px solid rgba(255, 255, 255, 0.9);
+          box-shadow: 0 3px 12px rgba(0, 0, 0, 0.25);
+          transition:
+            transform 0.15s ease,
+            box-shadow 0.15s ease;
+        }
+        .hero-avatar-fallback:hover {
+          transform: scale(1.05);
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
         }
       `}</style>
     </div>

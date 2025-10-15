@@ -496,17 +496,16 @@ html.keyboard-open .tabbar {
   justify-items: center;
 }
 .avatar-wrap-lg {
-  position: relative;
-  width: 112px;
-  height: 112px;
-  border-radius: 999px;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
   overflow: hidden;
-  background: #eef2ff;
-  box-shadow: var(--shadow-soft);
+  position: relative;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
+  background: var(--bg-muted, #f3f3f3);
 }
 .avatar-fallback-lg {
   font-weight: 800;
@@ -517,7 +516,7 @@ html.keyboard-open .tabbar {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: block;
+  border-radius: 50%;
 }
 .avatar-overlay {
   position: absolute;

@@ -226,17 +226,14 @@ export default function Profile() {
     setUploading(true)
 
     try {
-      // local preview
       const objectUrl = URL.createObjectURL(file)
       setPreview(objectUrl)
 
-      // basic guards (optional)
       const maxBytes = 2 * 1024 * 1024 // 2 MB
       if (file.size > maxBytes) throw new Error('Image must be ≤ 2 MB.')
       if (!file.type.startsWith('image/'))
         throw new Error('File must be an image.')
 
-      // path: avatars/{uid}/{timestamp}-{originalName}
       const safeName = file.name.replace(/\s+/g, '_')
       const path = `${user.id}/${Date.now()}-${safeName}`
 
@@ -247,14 +244,23 @@ export default function Profile() {
           cacheControl: '3600',
           contentType: file.type || 'image/jpeg',
         })
+
       if (upErr) throw upErr
 
-      // store the PATH; signed URL will resolve via effect
+      // Save the path immediately so it's persistent
+      const { error: dbErr } = await supabase
+        .from('profiles')
+        .update({ avatar_path: path })
+        .eq('id', user.id)
+
+      if (dbErr) throw dbErr
+
       setAvatarPath(path)
-      setPendingAvatar(true)
-      setMsg('Photo uploaded. Click “Save profile” to apply.')
-    } catch (e3) {
-      setErr(e3.message || 'Upload failed.')
+      setPendingAvatar(false)
+      setMsg('Photo uploaded and saved successfully!')
+    } catch (e) {
+      console.error('Upload error:', e)
+      setErr(e.message || 'Upload failed.')
     } finally {
       setUploading(false)
     }
