@@ -9,7 +9,7 @@ import HeaderBar from '../ui/HeaderBar'
 import TabBar from '../ui/TabBar'
 import ShiftDetailsModal from '../ui/ShiftDetailsModal'
 import AddShiftModal from '../ui/AddShiftModal'
-import DaySheet from '../ui/DaySheet'
+import DaySheetModal from '../ui/DaySheetModal'
 
 // ---------- helpers ----------
 const S = { ndash: '\u2013', times: '\u00D7', middot: '\u00B7' }
@@ -506,6 +506,33 @@ export default function CalendarPage({ theme, setTheme }) {
             const more = Math.max(0, shifts.length - preview.length)
             const inMonth =
               date.getMonth() === cursor.getMonth() || view !== 'month'
+            // pick an emoji from the first shift that has weather
+            const weatherEmoji = (() => {
+              const snap = (shifts.find((s) => s?.weather_snapshot) || {})
+                ?.weather_snapshot
+              if (!snap) return null
+              // prefer WMO code if you stored it
+              const code =
+                typeof snap.weathercode === 'number' ? snap.weathercode : null
+              if (code === 0) return '☀️'
+              if ([1, 2, 3].includes(code)) return '⛅️'
+              if ([45, 48].includes(code)) return '🌫️'
+              if ([51, 53, 55, 56, 57].includes(code)) return '🌦️'
+              if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return '🌧️'
+              if ([71, 73, 75, 77, 85, 86].includes(code)) return '❄️'
+              if ([95, 96, 99].includes(code)) return '⛈️'
+
+              // fallback: try a string field like "icon" or "summary"
+              const icon = (snap.icon || snap.summary || '').toLowerCase()
+              if (icon.includes('sun') || icon.includes('clear')) return '☀️'
+              if (icon.includes('cloud')) return '☁️'
+              if (icon.includes('rain') || icon.includes('shower')) return '🌧️'
+              if (icon.includes('snow')) return '❄️'
+              if (icon.includes('storm') || icon.includes('thunder'))
+                return '⛈️'
+              if (icon.includes('fog')) return '🌫️'
+              return '🌡️'
+            })()
 
             // COMPACT (mobile for week/month)
             const compactCell = (innerLabel) => (
@@ -524,6 +551,15 @@ export default function CalendarPage({ theme, setTheme }) {
                   </span>
                 </div>
                 {hasShifts && <div className="dot" aria-hidden />}
+                {weatherEmoji && (
+                  <div
+                    className="weather-emoji-small"
+                    title="Weather"
+                    aria-hidden
+                  >
+                    {weatherEmoji}
+                  </div>
+                )}
               </div>
             )
 
@@ -539,22 +575,128 @@ export default function CalendarPage({ theme, setTheme }) {
 
             // DESKTOP or day view
             if (view === 'day') {
+              // ---- Weather model for the day (first shift that has weather) ----
+              const wxSnap =
+                (shifts.find((s) => s?.weather_snapshot) || {})
+                  ?.weather_snapshot || null
+              const weather = (() => {
+                if (!wxSnap) return null
+                const code =
+                  typeof wxSnap.weathercode === 'number'
+                    ? wxSnap.weathercode
+                    : null
+                const emoji =
+                  code === 0
+                    ? '☀️'
+                    : [1, 2, 3].includes(code)
+                      ? '⛅️'
+                      : [45, 48].includes(code)
+                        ? '🌫️'
+                        : [51, 53, 55, 56, 57].includes(code)
+                          ? '🌦️'
+                          : [61, 63, 65, 66, 67, 80, 81, 82].includes(code)
+                            ? '🌧️'
+                            : [71, 73, 75, 77, 85, 86].includes(code)
+                              ? '❄️'
+                              : [95, 96, 99].includes(code)
+                                ? '⛈️'
+                                : String(wxSnap.summary || '')
+                                      .toLowerCase()
+                                      .includes('cloud')
+                                  ? '☁️'
+                                  : '🌡️'
+
+                const toF = (c) => Math.round((c * 9) / 5 + 32)
+                const tAvg =
+                  typeof wxSnap.t_avg_f === 'number'
+                    ? Math.round(wxSnap.t_avg_f)
+                    : typeof wxSnap.t_avg_c === 'number'
+                      ? toF(wxSnap.t_avg_c)
+                      : null
+                const tMax =
+                  typeof wxSnap.t_max_f === 'number'
+                    ? Math.round(wxSnap.t_max_f)
+                    : typeof wxSnap.t_max_c === 'number'
+                      ? toF(wxSnap.t_max_c)
+                      : null
+                const tMin =
+                  typeof wxSnap.t_min_f === 'number'
+                    ? Math.round(wxSnap.t_min_f)
+                    : typeof wxSnap.t_min_c === 'number'
+                      ? toF(wxSnap.t_min_c)
+                      : null
+                const tempLine =
+                  tAvg != null
+                    ? `${tAvg}°`
+                    : tMin != null && tMax != null
+                      ? `${tMin}° / ${tMax}°`
+                      : tMax != null
+                        ? `${tMax}°`
+                        : tMin != null
+                          ? `${tMin}°`
+                          : null
+
+                const precipIn =
+                  typeof wxSnap.precip_in === 'number'
+                    ? wxSnap.precip_in
+                    : typeof wxSnap.precip_mm === 'number'
+                      ? Math.round((wxSnap.precip_mm / 25.4) * 100) / 100
+                      : null
+                const precipText =
+                  precipIn != null && precipIn > 0
+                    ? `${precipIn.toFixed(precipIn < 0.1 ? 2 : 1)} in`
+                    : null
+                const summary = wxSnap.summary || 'Weather'
+
+                return { emoji, tempLine, precipText, summary }
+              })()
+
               return (
-                <div key={index} className="cal-cell">
-                  <div className="cal-cell-head">
-                    <span className={today ? 'cal-cell-today' : ''}>
+                <div key={index} className="cal-cell day-card">
+                  {/* Header */}
+                  <div className="cal-day-head">
+                    <div className={`title ${today ? 'cal-cell-today' : ''}`}>
                       {date.toLocaleDateString(undefined, {
                         weekday: 'long',
                         month: '2-digit',
                         day: '2-digit',
                         year: 'numeric',
                       })}
-                    </span>
+                    </div>
+                    {weather && (
+                      <div className="wx-badge" title="Weather" aria-hidden>
+                        {weather.emoji}
+                      </div>
+                    )}
                   </div>
+
+                  {/* Weather strip (only if available) */}
+                  {weather && (
+                    <div className="day-weather">
+                      <div className="left">
+                        <span className="emoji">{weather.emoji}</span>
+                        <div className="stack">
+                          <div className="summary">
+                            <strong>{weather.summary}</strong>
+                          </div>
+                          <div className="sub">
+                            {weather.tempLine ? (
+                              <span>Temp: {weather.tempLine}</span>
+                            ) : null}
+                            {weather.precipText ? (
+                              <span> · Precip: {weather.precipText}</span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Shifts list */}
                   {shifts.length === 0 ? (
                     <div
                       className="cal-shift cal-empty"
-                      onClick={() => openAddFor(date)} // open modal for this day
+                      onClick={() => openAddFor(date)}
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => e.key === 'Enter' && openAddFor(date)}
@@ -562,41 +704,47 @@ export default function CalendarPage({ theme, setTheme }) {
                     >
                       <div className="note">No shifts yet. Tap to add.</div>
                     </div>
-                  ) : null}
-
-                  {shifts.map((shift) => {
-                    const net =
-                      Number(shift.cash_tips || 0) +
-                      Number(shift.card_tips || 0) -
-                      Number(shift.tip_out_total || 0)
-                    const eff =
-                      Number(shift.hours || 0) > 0
-                        ? net / Number(shift.hours)
-                        : 0
-                    return (
-                      <div
-                        key={shift.id}
-                        className="cal-shift"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setSelectedShift(shift)
-                        }}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') setSelectedShift(shift)
-                        }}
-                      >
-                        <div>
-                          <b>{currencyFormatter.format(net)}</b> {S.middot}{' '}
-                          {Number(shift.hours || 0).toFixed(2)}h
-                        </div>
-                        <div className="note">
-                          {currencyFormatter.format(eff)} /h
-                        </div>
-                      </div>
-                    )
-                  })}
+                  ) : (
+                    <div className="shift-list">
+                      {shifts.map((shift) => {
+                        const cash = Number(shift?.cash_tips ?? 0)
+                        const card = Number(shift?.card_tips ?? 0)
+                        const tipout = Number(shift?.tip_out_total ?? 0)
+                        const hours = Number(shift?.hours ?? 0)
+                        const net = cash + card - tipout
+                        const eff = hours > 0 ? net / hours : 0
+                        return (
+                          <div
+                            key={shift.id}
+                            className="shift-chip-day"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setSelectedShift(shift)
+                            }}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') setSelectedShift(shift)
+                            }}
+                          >
+                            <div className="row">
+                              <b className="net">
+                                {currencyFormatter.format(net)}
+                              </b>
+                              <span className="dot">·</span>
+                              <span className="hours">{hours.toFixed(2)}h</span>
+                              <span className="eff">
+                                ({currencyFormatter.format(eff)} /h)
+                              </span>
+                            </div>
+                            {shift?.notes ? (
+                              <div className="notes">{shift.notes}</div>
+                            ) : null}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               )
             }
@@ -613,6 +761,11 @@ export default function CalendarPage({ theme, setTheme }) {
                       ? date.getDate()
                       : date.toLocaleDateString(undefined, { day: 'numeric' })}
                   </span>
+                  {weatherEmoji && (
+                    <div className="weather-emoji" title="Weather" aria-hidden>
+                      {weatherEmoji}
+                    </div>
+                  )}
                   <button
                     className="cal-btn"
                     title="Add shift"
@@ -696,99 +849,21 @@ export default function CalendarPage({ theme, setTheme }) {
         />
       )}
 
-      {/* MOBILE Day sheet */}
-      {daySheetOpen && (
-        <div
-          className="modal-backdrop"
-          onClick={() => setDaySheetOpen(false)}
-          role="dialog"
-          aria-modal="true"
-        >
-          <div
-            className="modal-card"
-            onClick={(e) => e.stopPropagation()}
-            style={{ width: 'min(560px, 92vw)' }}
-          >
-            <div className="modal-head">
-              <div className="modal-title">
-                {parseDateOnlyLocal(daySheetDate).toLocaleDateString()}
-              </div>
-              <button
-                className="cal-btn"
-                onClick={() => setDaySheetOpen(false)}
-                aria-label="Close day details"
-              >
-                {S.times}
-              </button>
-            </div>
-            <div className="modal-body" style={{ display: 'grid', gap: 10 }}>
-              <button
-                className="btn btn-primary"
-                onClick={() => {
-                  openAddFor(parseDateOnlyLocal(daySheetDate))
-                  setDaySheetOpen(false)
-                }}
-              >
-                + Add shift
-              </button>
-              {(byDate.get(daySheetDate) || []).length === 0 && (
-                <div className="note">No shifts yet for this day.</div>
-              )}
-              {(byDate.get(daySheetDate) || []).map((shift) => {
-                const cash = Number(shift?.cash_tips ?? 0)
-                const card = Number(shift?.card_tips ?? 0)
-                const tipout = Number(shift?.tip_out_total ?? 0)
-                const hours = Number(shift?.hours ?? 0)
-                const net = cash + card - tipout
-                const eff = hours > 0 ? net / hours : 0
-                const fmt = (n) =>
-                  currencyFormatter?.format
-                    ? currencyFormatter.format(n)
-                    : `$${Number(n || 0).toFixed(2)}`
-                return (
-                  <div
-                    key={shift.id}
-                    className="cal-shift"
-                    onClick={() => {
-                      setSelectedShift(shift)
-                      setDaySheetOpen(false)
-                    }}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        setSelectedShift(shift)
-                        setDaySheetOpen(false)
-                      }
-                    }}
-                  >
-                    <div>
-                      <b>{fmt(net)}</b> {S.middot} {hours.toFixed(2)}h
-                    </div>
-                    <div className="note">{fmt(eff)} /h</div>
-                    {shift?.notes ? (
-                      <div className="note" style={{ marginTop: 4 }}>
-                        {shift.notes}
-                      </div>
-                    ) : null}
-                  </div>
-                )
-              })}
-            </div>
-            <div
-              className="modal-actions"
-              style={{ justifyContent: 'flex-end' }}
-            >
-              <button
-                className="btn secondary"
-                onClick={() => setDaySheetOpen(false)}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DaySheetModal
+        open={daySheetOpen}
+        date={daySheetDate}
+        shifts={byDate.get(daySheetDate) || []}
+        onClose={() => setDaySheetOpen(false)}
+        onAdd={(dateObj) => {
+          openAddFor(dateObj)
+          setDaySheetOpen(false)
+        }}
+        onOpenShift={(shift) => {
+          setSelectedShift(shift)
+          setDaySheetOpen(false)
+        }}
+        currencyFormatter={currencyFormatter}
+      />
 
       {addOpen && (
         <AddShiftModal
@@ -912,6 +987,134 @@ export default function CalendarPage({ theme, setTheme }) {
             border-radius: 10px;
             cursor: pointer;
           }
+        }
+        :global(.cal-cell) {
+          position: relative;
+        }
+        :global(.cal-cell.compact) {
+          position: relative; /* so the badge can anchor to this cell */
+        }
+
+        :global(.weather-emoji-small) {
+          position: absolute;
+          top: 4px;
+          right: 6px;
+          font-size: 12px;
+          line-height: 1;
+          opacity: 0.9;
+          pointer-events: none; /* don’t block taps */
+          user-select: none;
+        }
+        :global(.weather-emoji) {
+          position: absolute;
+          top: 16px;
+          left: 25px;
+          font-size: 14px;
+          line-height: 1;
+          opacity: 0.9;
+          pointer-events: none; /* don’t block taps */
+          user-select: none;
+        }
+        /* Day card container */
+        :global(.cal-grid.cal-day .day-card) {
+          display: grid;
+          gap: 12px;
+        }
+
+        /* Header with small emoji at top-right */
+        :global(.cal-grid.cal-day .cal-day-head) {
+          position: relative;
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+        }
+        :global(.cal-grid.cal-day .cal-day-head .title) {
+          font-weight: 600;
+        }
+        :global(.cal-grid.cal-day .cal-day-head .wx-badge) {
+          font-size: 16px;
+          line-height: 1;
+          opacity: 0.95;
+          user-select: none;
+          pointer-events: none;
+        }
+
+        /* Weather strip */
+        :global(.cal-grid.cal-day .day-weather) {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          padding: 10px 12px;
+          border-radius: 12px;
+          border: 1px solid var(--border, #e5e7eb);
+          background: linear-gradient(135deg, #eff6ff, #f0fdfa);
+          box-shadow: 0 6px 18px rgba(30, 58, 138, 0.06);
+        }
+        :global(.cal-grid.cal-day .day-weather .left) {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          min-width: 0;
+        }
+        :global(.cal-grid.cal-day .day-weather .emoji) {
+          font-size: 22px;
+        }
+        :global(.cal-grid.cal-day .day-weather .stack) {
+          display: grid;
+          gap: 2px;
+          min-width: 0;
+        }
+        :global(.cal-grid.cal-day .day-weather .summary) {
+          font-weight: 800;
+          color: #0f172a;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        :global(.cal-grid.cal-day .day-weather .sub) {
+          font-size: 12px;
+          color: #475569;
+        }
+
+        /* Shift chips */
+        :global(.cal-grid.cal-day .shift-list) {
+          display: grid;
+          gap: 8px;
+        }
+        :global(.cal-grid.cal-day .shift-chip-day) {
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 10px 12px;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+          cursor: pointer;
+          transition:
+            background 0.15s,
+            transform 0.08s;
+        }
+        :global(.cal-grid.cal-day .shift-chip-day:hover) {
+          background: var(--hover);
+          transform: translateY(-1px);
+        }
+        :global(.cal-grid.cal-day .shift-chip-day .row) {
+          display: flex;
+          align-items: baseline;
+          gap: 6px;
+          flex-wrap: wrap;
+        }
+        :global(.cal-grid.cal-day .shift-chip-day .net) {
+          color: var(--brand, #2563eb);
+        }
+        :global(.cal-grid.cal-day .shift-chip-day .hours),
+        :global(.cal-grid.cal-day .shift-chip-day .eff) {
+          color: var(--text-muted);
+          font-size: 13px;
+        }
+        :global(.cal-grid.cal-day .shift-chip-day .notes) {
+          margin-top: 4px;
+          font-size: 13px;
+          color: var(--text-muted);
         }
       `}</style>
     </div>
