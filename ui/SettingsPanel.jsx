@@ -233,6 +233,74 @@ function TinyIconBtn({ label, variant = 'neutral', onClick, disabled, title }) {
 }
 
 /* ---------------- main component ---------------- */
+function CollapsibleCard({ title, children, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div className="collapsible-card">
+      <button
+        type="button"
+        className="collapsible-header"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+      >
+        <span className="collapsible-title">{title}</span>
+        <span className={`arrow ${open ? 'open' : ''}`}>▾</span>
+      </button>
+      {open && <div className="collapsible-content">{children}</div>}
+      <style jsx>{`
+        .collapsible-card {
+          border: 1px solid var(--border);
+          border-radius: 16px;
+          background: #ffffff;
+          box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05);
+          overflow: hidden;
+          transition: all 0.25s ease;
+        }
+        .collapsible-header {
+          width: 100%;
+          background: #f9fafb;
+          border: none;
+          outline: none;
+          font-weight: 700;
+          font-size: 16px;
+          color: #111827;
+          padding: 14px 18px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          cursor: pointer;
+          transition: background 0.2s ease;
+        }
+        .collapsible-header:hover {
+          background: #f3f4f6;
+        }
+        .arrow {
+          transition: transform 0.2s ease;
+          color: #6b7280;
+        }
+        .arrow.open {
+          transform: rotate(180deg);
+        }
+        .collapsible-content {
+          padding: 16px 18px;
+          border-top: 1px solid var(--border);
+          background: #fff;
+          animation: fadeIn 0.25s ease;
+        }
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(-4px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
+    </div>
+  )
+}
 
 export default function SettingsPanel({
   onDirtyChange,
@@ -247,6 +315,8 @@ export default function SettingsPanel({
   const [showArchivedJobs, setShowArchivedJobs] = useState(false)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const planTier = user?.plan_tier || user?.tier || 'free'
+  const [showProCard, setShowProCard] = useState(false)
+  const [showWeatherWarning, setShowWeatherWarning] = useState(false)
 
   // Auto-disable paid features + auto-save if user downgrades
   useEffect(() => {
@@ -422,9 +492,7 @@ export default function SettingsPanel({
         .filter((l) => !String(l.address || '').trim())
       if (missing.length > 0) {
         setHighlightChanges(true)
-        alert(
-          'Weather tracking is on. Please add an address for all active locations.',
-        )
+        setShowWeatherWarning(true)
         return
       }
     }
@@ -542,89 +610,42 @@ export default function SettingsPanel({
           </div>
         </div>
       </div>
+      {/* --- Payout (compact segmented) --- */}
+      <div className="card" style={{ padding: 12 }}>
+        <div
+          className="h2"
+          style={{ margin: 0, fontSize: 16, marginBottom: 8 }}
+        >
+          Tip payout
+        </div>
+        <Seg
+          value={draft.payout_mode}
+          onChange={(v) => setField('payout_mode', v)}
+          options={[
+            { value: 'both', label: 'Cash + Card' },
+            { value: 'cash_only', label: 'Cash only' },
+            { value: 'card_only', label: 'Card only' },
+          ]}
+          compact
+        />
+        <div className="note" style={{ marginTop: 6 }}>
+          Controls which inputs you see when logging a shift.
+        </div>
+      </div>
 
       {/* --- First Impression: Locations --- */}
-      <div className="card" style={{ padding: 12 }}>
+      <CollapsibleCard title="Locations">
         <div
           style={{
             display: 'flex',
+            justifyContent: 'flex-end',
             alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 10,
+            gap: 8,
             flexWrap: 'wrap',
           }}
         >
-          <div className="h2" style={{ margin: 0, fontSize: 16 }}>
-            Locations
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div className="note">Show archived</div>
-            <Switch checked={showArchivedJobs} onChange={setShowArchivedJobs} />
-          </div>
-        </div>
-
-        {/* Weather (global) */}
-        <div className="card" style={{ marginTop: 10, padding: 10 }}>
-          <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
-            Weather
-          </div>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 8,
-              flexWrap: 'wrap',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span>Track weather for each shift</span>
-              <span
-                style={{
-                  padding: '2px 8px',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  borderRadius: '999px',
-                  background:
-                    planTier === 'pro' || planTier === 'founder'
-                      ? '#facc15'
-                      : '#e5e7eb',
-                  color:
-                    planTier === 'pro' || planTier === 'founder'
-                      ? '#1f2937'
-                      : '#6b7280',
-                  border: '1px solid #d1d5db',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.3px',
-                }}
-              >
-                Pro
-              </span>
-            </div>
-
-            <Switch
-              checked={!!draft.track_weather}
-              disabled={false} // never truly disable it
-              onChange={(v) => {
-                const entitled =
-                  ['pro', 'founder'].includes(user?.plan_tier) ||
-                  user?.pro_override
-
-                if (!entitled) {
-                  setShowUpgradeModal(true)
-                  return
-                }
-
-                setField('track_weather', v)
-              }}
-              title="Track weather"
-            />
-          </div>
-
-          <div className="note" style={{ marginTop: 6 }}>
-            Requires an address per active location (we’ll look up coordinates
-            automatically).
-          </div>
+          <div className="note">Show archived</div>
+          <Switch checked={showArchivedJobs} onChange={setShowArchivedJobs} />
         </div>
 
         {/* Primary location row */}
@@ -660,108 +681,6 @@ export default function SettingsPanel({
             finalizeNewJob(primary.id, jobId, name)
           }
         />
-
-        {/* Multi-locations toggle + default selector */}
-        <div className="card" style={{ marginTop: 10, padding: 10 }}>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr auto',
-              alignItems: 'center',
-              gap: 12,
-            }}
-          >
-            <div style={{ display: 'grid', gap: 4 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ fontWeight: 700 }}>Track multiple locations?</div>
-                {/* PRO pill */}
-                <span
-                  style={{
-                    padding: '2px 8px',
-                    fontSize: 11,
-                    fontWeight: 700,
-                    borderRadius: '999px',
-                    background:
-                      planTier === 'pro' || planTier === 'founder'
-                        ? '#facc15'
-                        : '#e5e7eb',
-                    color:
-                      planTier === 'pro' || planTier === 'founder'
-                        ? '#1f2937'
-                        : '#6b7280',
-                    border: '1px solid #d1d5db',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.3px',
-                  }}
-                >
-                  Pro
-                </span>
-              </div>
-              <div className="note">
-                Enable to add more locations and pick a default.
-              </div>
-            </div>
-
-            <Switch
-              checked={!!draft.multiple_locations}
-              disabled={false} // keep interactive so they can click it
-              onChange={(v) => {
-                const entitled =
-                  planTier === 'pro' ||
-                  planTier === 'founder' ||
-                  user?.pro_override
-                if (!entitled) {
-                  setShowUpgradeModal(true)
-                  return
-                }
-                setField('multiple_locations', v)
-              }}
-              title="Multiple locations"
-            />
-          </div>
-
-          {draft.multiple_locations && (
-            <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
-              <label className="field" style={{ maxWidth: 360 }}>
-                <span className="field-label">Default location</span>
-                <select
-                  className={`input ${
-                    highlightChanges && changed('default_location_id')
-                      ? 'field-changed'
-                      : ''
-                  }`}
-                  value={
-                    (draft.default_location_id ??
-                      (primary ? primary.id : '')) ||
-                    ''
-                  }
-                  onChange={(e) =>
-                    setField(
-                      'default_location_id',
-                      e.target.value || (primary ? primary.id : ''),
-                    )
-                  }
-                >
-                  {(draft.locations || [])
-                    .filter((l) => l.active)
-                    .map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.name || '(untitled)'}
-                      </option>
-                    ))}
-                </select>
-              </label>
-
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <TinyIconBtn
-                  label="+ Add location"
-                  variant="primary"
-                  onClick={addAdditionalLocation}
-                />
-              </div>
-            </div>
-          )}
-        </div>
 
         {/* Additional (active) */}
         {draft.multiple_locations && activeAdditional.length > 0 && (
@@ -828,111 +747,75 @@ export default function SettingsPanel({
               </div>
             </div>
           )}
-      </div>
-
-      {/* --- Payout (compact segmented) --- */}
-      <div className="card" style={{ padding: 12 }}>
-        <div
-          className="h2"
-          style={{ margin: 0, fontSize: 16, marginBottom: 8 }}
-        >
-          Tip payout
-        </div>
-        <Seg
-          value={draft.payout_mode}
-          onChange={(v) => setField('payout_mode', v)}
-          options={[
-            { value: 'both', label: 'Cash + Card' },
-            { value: 'cash_only', label: 'Cash only' },
-            { value: 'card_only', label: 'Card only' },
-          ]}
-          compact
-        />
-        <div className="note" style={{ marginTop: 6 }}>
-          Controls which inputs you see when logging a shift.
-        </div>
-      </div>
+      </CollapsibleCard>
 
       {/* --- Calendar & Form in a clean two-up --- */}
-      <div className="two grid" style={{ gap: 12 }}>
-        <div className="card" style={{ padding: 12 }}>
-          <div
-            className="h2"
-            style={{ margin: 0, fontSize: 16, marginBottom: 8 }}
-          >
-            Calendar
-          </div>
-          <div className="two grid" style={{ gap: 10 }}>
-            <label className="field">
-              <span className="field-label">Default view</span>
-              <select
-                className={`input ${highlightChanges && changed('default_calendar_view') ? 'field-changed' : ''}`}
-                value={draft.default_calendar_view}
-                onChange={(e) =>
-                  setField('default_calendar_view', e.target.value)
-                }
-              >
-                <option value="day">Day</option>
-                <option value="week">Week</option>
-                <option value="month">Month</option>
-              </select>
-            </label>
-            <label className="field">
-              <span className="field-label">Week starts on</span>
-              <select
-                className={`input ${highlightChanges && changed('week_start') ? 'field-changed' : ''}`}
-                value={draft.week_start}
-                onChange={(e) => setField('week_start', e.target.value)}
-              >
-                <option value="sunday">Sunday</option>
-                <option value="monday">Monday</option>
-              </select>
-            </label>
-          </div>
+      <CollapsibleCard title="Calendar">
+        <div className="two grid" style={{ gap: 10 }}>
+          <label className="field">
+            <span className="field-label">Default view</span>
+            <select
+              className={`input ${highlightChanges && changed('default_calendar_view') ? 'field-changed' : ''}`}
+              value={draft.default_calendar_view}
+              onChange={(e) =>
+                setField('default_calendar_view', e.target.value)
+              }
+            >
+              <option value="day">Day</option>
+              <option value="week">Week</option>
+              <option value="month">Month</option>
+            </select>
+          </label>
+          <label className="field">
+            <span className="field-label">Week starts on</span>
+            <select
+              className={`input ${highlightChanges && changed('week_start') ? 'field-changed' : ''}`}
+              value={draft.week_start}
+              onChange={(e) => setField('week_start', e.target.value)}
+            >
+              <option value="sunday">Sunday</option>
+              <option value="monday">Monday</option>
+            </select>
+          </label>
         </div>
+      </CollapsibleCard>
 
-        <div className="card" style={{ padding: 12 }}>
+      {/* --- Shift Details --- */}
+      <CollapsibleCard title="Shift Details">
+        <div style={{ display: 'grid', gap: 10 }}>
           <div
-            className="h2"
-            style={{ margin: 0, fontSize: 16, marginBottom: 8 }}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr auto',
+              alignItems: 'center',
+              gap: 8,
+            }}
           >
-            Shift form
+            <div>Track Sales</div>
+            <Switch
+              checked={!!draft.track_sales}
+              onChange={(v) => setField('track_sales', v)}
+            />
           </div>
-          <div style={{ display: 'grid', gap: 10 }}>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr auto',
-                alignItems: 'center',
-                gap: 8,
-              }}
-            >
-              <div>Track Sales</div>
-              <Switch
-                checked={!!draft.track_sales}
-                onChange={(v) => setField('track_sales', v)}
-              />
-            </div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr auto',
-                alignItems: 'center',
-                gap: 8,
-              }}
-            >
-              <div>Track Hours</div>
-              <Switch
-                checked={!!draft.track_hours}
-                onChange={(v) => setField('track_hours', v)}
-              />
-            </div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr auto',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <div>Track Hours</div>
+            <Switch
+              checked={!!draft.track_hours}
+              onChange={(v) => setField('track_hours', v)}
+            />
           </div>
         </div>
-      </div>
+      </CollapsibleCard>
 
       {/* --- Advanced --- */}
-      <div className="card" style={{ padding: 12 }}>
+      <CollapsibleCard title="Advanced">
         <div
           className="h2"
           style={{ margin: 0, fontSize: 16, marginBottom: 8 }}
@@ -974,6 +857,201 @@ export default function SettingsPanel({
             />
           </label>
         </div>
+      </CollapsibleCard>
+      {/* --- Pro Features (collapsible) --- */}
+      <div className="ts-pro-card">
+        <button
+          type="button"
+          className="ts-pro-header"
+          onClick={() => setShowProCard?.((prev) => !prev)} // we'll define this in a sec
+          aria-expanded={showProCard}
+        >
+          <div className="ts-pro-left">
+            <span className="ts-pro-pill">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden="true"
+                className="ts-pro-crown"
+              >
+                <path d="M5 16l-1-9 4 3 4-6 4 6 4-3-1 9H5zm0 2h14v2H5v-2z" />
+              </svg>
+              <span>Pro</span>
+            </span>
+            <span className="ts-pro-title">Features</span>
+          </div>
+          <span className={`ts-pro-arrow${showProCard ? 'open' : ''}`}>▾</span>
+        </button>
+
+        {showProCard && (
+          <div className="ts-pro-content" style={{ padding: 12 }}>
+            {/* Weather (global) */}
+
+            <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
+              Weather
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>Track weather for each shift</span>
+                <span
+                  style={{
+                    padding: '2px 8px',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    borderRadius: '999px',
+                    background:
+                      planTier === 'pro' || planTier === 'founder'
+                        ? '#facc15'
+                        : '#e5e7eb',
+                    color:
+                      planTier === 'pro' || planTier === 'founder'
+                        ? '#1f2937'
+                        : '#6b7280',
+                    border: '1px solid #d1d5db',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.3px',
+                  }}
+                >
+                  Pro
+                </span>
+              </div>
+
+              <Switch
+                checked={!!draft.track_weather}
+                disabled={false} // never truly disable it
+                onChange={(v) => {
+                  const entitled =
+                    ['pro', 'founder'].includes(user?.plan_tier) ||
+                    user?.pro_override
+
+                  if (!entitled) {
+                    setShowUpgradeModal(true)
+                    return
+                  }
+
+                  setField('track_weather', v)
+                }}
+                title="Track weather"
+              />
+            </div>
+
+            <div className="note" style={{ marginTop: 6 }}>
+              Requires an address per active location (we’ll look up coordinates
+              automatically).
+            </div>
+            {/* Multi-locations toggle + default selector */}
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr auto',
+                alignItems: 'center',
+                gap: 12,
+              }}
+            >
+              <div style={{ display: 'grid', gap: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ fontWeight: 700 }}>
+                    Track multiple locations?
+                  </div>
+                  {/* PRO pill */}
+                  <span
+                    style={{
+                      padding: '2px 8px',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      borderRadius: '999px',
+                      background:
+                        planTier === 'pro' || planTier === 'founder'
+                          ? '#facc15'
+                          : '#e5e7eb',
+                      color:
+                        planTier === 'pro' || planTier === 'founder'
+                          ? '#1f2937'
+                          : '#6b7280',
+                      border: '1px solid #d1d5db',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.3px',
+                    }}
+                  >
+                    Pro
+                  </span>
+                </div>
+                <div className="note">
+                  Enable to add more locations and pick a default.
+                </div>
+              </div>
+
+              <Switch
+                checked={!!draft.multiple_locations}
+                disabled={false} // keep interactive so they can click it
+                onChange={(v) => {
+                  const entitled =
+                    planTier === 'pro' ||
+                    planTier === 'founder' ||
+                    user?.pro_override
+                  if (!entitled) {
+                    setShowUpgradeModal(true)
+                    return
+                  }
+                  setField('multiple_locations', v)
+                }}
+                title="Multiple locations"
+              />
+            </div>
+
+            {draft.multiple_locations && (
+              <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+                <label className="field" style={{ maxWidth: 360 }}>
+                  <span className="field-label">Default location</span>
+                  <select
+                    className={`input ${
+                      highlightChanges && changed('default_location_id')
+                        ? 'field-changed'
+                        : ''
+                    }`}
+                    value={
+                      (draft.default_location_id ??
+                        (primary ? primary.id : '')) ||
+                      ''
+                    }
+                    onChange={(e) =>
+                      setField(
+                        'default_location_id',
+                        e.target.value || (primary ? primary.id : ''),
+                      )
+                    }
+                  >
+                    {(draft.locations || [])
+                      .filter((l) => l.active)
+                      .map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.name || '(untitled)'}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <TinyIconBtn
+                    label="+ Add location"
+                    variant="primary"
+                    onClick={addAdditionalLocation}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Sticky actions (bottom) */}
@@ -992,6 +1070,59 @@ export default function SettingsPanel({
       </div>
       {showUpgradeModal && (
         <UpgradeModal onClose={() => setShowUpgradeModal(false)} />
+      )}
+      {showWeatherWarning && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setShowWeatherWarning(false)}
+        >
+          <div
+            className="modal-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 'min(420px, 90vw)',
+              borderRadius: 16,
+              background: '#fff',
+              padding: 20,
+              boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
+            }}
+          >
+            <div className="modal-head" style={{ marginBottom: 12 }}>
+              <div
+                className="modal-title"
+                style={{ fontWeight: 800, fontSize: 18 }}
+              >
+                Missing Addresses
+              </div>
+            </div>
+            <div className="modal-body" style={{ marginBottom: 20 }}>
+              Weather tracking is turned on! Please open the "Locations" drop
+              down and add the address for your location(s)!
+            </div>
+            <div
+              className="modal-actions"
+              style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}
+            >
+              <button
+                className="btn secondary"
+                onClick={() => setShowWeatherWarning(false)}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+          <style jsx>{`
+            .modal-backdrop {
+              position: fixed;
+              inset: 0;
+              background: rgba(0, 0, 0, 0.4);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              z-index: 2000;
+            }
+          `}</style>
+        </div>
       )}
     </div>
   )
@@ -1218,13 +1349,14 @@ function LocationRow({
           grid-template-columns: 120px 1fr;
           align-items: start;
           gap: 12px;
-          padding: 12px;
-          border: 1px solid var(--border);
-          border-radius: 12px;
-          background: #fff;
-          box-shadow: var(--shadow-soft);
-          margin-top: 10px;
+          padding: 12px 0; /* remove background box, keep spacing */
+          border-bottom: 1px solid var(--border);
+          background: transparent;
+          box-shadow: none;
+          border-radius: 0;
+          margin-top: 0;
         }
+
         @media (max-width: 560px) {
           .locrow {
             grid-template-columns: 1fr;
