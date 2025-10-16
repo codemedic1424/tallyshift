@@ -843,11 +843,11 @@ export default function SettingsPanel({
         </div>
       </CollapsibleCard>
       {/* --- Pro Features (collapsible) --- */}
-      <div className="ts-pro-card">
+      <div className="ts-pro-card" id="pro-features-card">
         <button
           type="button"
           className="ts-pro-header"
-          onClick={() => setShowProCard?.((prev) => !prev)} // we'll define this in a sec
+          onClick={() => setShowProCard?.((prev) => !prev)}
           aria-expanded={showProCard}
         >
           <div className="ts-pro-left">
@@ -998,6 +998,7 @@ export default function SettingsPanel({
                 <label className="field" style={{ maxWidth: 360 }}>
                   <span className="field-label">Default location</span>
                   <select
+                    id="default-location-dropdown"
                     className={`input ${
                       highlightChanges && changed('default_location_id')
                         ? 'field-changed'
@@ -1108,6 +1109,43 @@ export default function SettingsPanel({
           `}</style>
         </div>
       )}
+      <>
+        {/* Global animation styles */}
+        <style jsx global>{`
+          #default-location-dropdown.flash-highlight {
+            animation: dropdownFlash 1.4s ease-in-out;
+            position: relative;
+            z-index: 999;
+          }
+
+          @keyframes dropdownFlash {
+            0% {
+              outline: 2px solid rgba(34, 197, 94, 0.6);
+              box-shadow: 0 0 6px 3px rgba(34, 197, 94, 0.3);
+              background-color: rgba(220, 252, 231, 0.6);
+              transform: scale(1.015);
+            }
+            40% {
+              outline: 2px solid rgba(34, 197, 94, 0.4);
+              box-shadow: 0 0 8px 4px rgba(34, 197, 94, 0.25);
+              background-color: rgba(240, 253, 244, 0.8);
+              transform: scale(1.01);
+            }
+            80% {
+              outline: 1px solid rgba(34, 197, 94, 0.25);
+              box-shadow: 0 0 5px 2px rgba(34, 197, 94, 0.15);
+              background-color: #fff;
+              transform: scale(1);
+            }
+            100% {
+              outline: none;
+              box-shadow: none;
+              transform: none;
+              background-color: #fff;
+            }
+          }
+        `}</style>
+      </>
     </div>
   )
 }
@@ -1145,7 +1183,44 @@ function LocationRow({
       <div className="left">
         <div className="label">{label}</div>
         <div className="badges">
-          {isDefault && <span className="badge">Default Location</span>}
+          {isDefault && (
+            <span
+              className="badge clickable"
+              onClick={async () => {
+                const card = document.getElementById('pro-features-card')
+                if (!card) return
+
+                // Expand the section if it’s closed
+                const header = card.querySelector('.ts-pro-header')
+                const content = card.querySelector('.ts-pro-content')
+                if (header && !content) header.click()
+
+                // Wait for the animation to finish rendering
+                await new Promise((res) => setTimeout(res, 400))
+
+                // Scroll smoothly and adjust for header offset
+                const dropdown = document.getElementById(
+                  'default-location-dropdown',
+                )
+                if (dropdown) {
+                  dropdown.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center',
+                  })
+                  window.scrollBy(0, -80) // adjust this if it's slightly off
+
+                  // Glow effect
+                  dropdown.classList.add('flash-highlight')
+                  setTimeout(
+                    () => dropdown.classList.remove('flash-highlight'),
+                    1500,
+                  )
+                }
+              }}
+            >
+              Default Location
+            </span>
+          )}
           {archived && <span className="badge">Archived</span>}
         </div>
       </div>
@@ -1163,7 +1238,39 @@ function LocationRow({
           />
           <div className="spacer" />
           {onMakeDefault && !isDefault && !archived && (
-            <TinyIconBtn label="Make default" onClick={onMakeDefault} />
+            <TinyIconBtn
+              label="Make default"
+              onClick={() => {
+                // Do your normal “make default” logic
+                onMakeDefault?.()
+
+                // Scroll to the Pro Features section
+                const card = document.getElementById('pro-features-card')
+                if (card) {
+                  // If it's collapsed, click the header to expand it
+                  const header = card.querySelector('.ts-pro-header')
+                  const content = card.querySelector('.ts-pro-content')
+                  if (header && !content) header.click()
+
+                  // Smooth scroll to it
+                  card.scrollIntoView({ behavior: 'smooth', block: 'center' })
+
+                  // After the scroll, briefly highlight the dropdown
+                  setTimeout(() => {
+                    const dropdown = document.getElementById(
+                      'default-location-dropdown',
+                    )
+                    if (dropdown) {
+                      dropdown.classList.add('highlight')
+                      setTimeout(
+                        () => dropdown.classList.remove('highlight'),
+                        1500,
+                      )
+                    }
+                  }, 600)
+                }
+              }}
+            />
           )}
           {onToggleArchive && (
             <TinyIconBtn
@@ -1328,6 +1435,30 @@ function LocationRow({
       </div>
 
       <style jsx>{`
+        .badge.clickable {
+          cursor: pointer;
+          background: #f3f4f6;
+          transition:
+            background 0.2s ease,
+            box-shadow 0.2s ease;
+        }
+
+        .badge.clickable:hover {
+          background: #e5e7eb;
+        }
+
+        .badge.clickable {
+          cursor: pointer;
+          background: #f3f4f6;
+          transition:
+            background 0.2s ease,
+            box-shadow 0.2s ease;
+        }
+
+        .badge.clickable:hover {
+          background: #e5e7eb;
+        }
+
         .locrow {
           display: grid;
           grid-template-columns: 120px 1fr;
