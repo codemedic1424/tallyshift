@@ -610,31 +610,9 @@ export default function SettingsPanel({
           </div>
         </div>
       </div>
-      {/* --- Payout (compact segmented) --- */}
-      <div className="card" style={{ padding: 12 }}>
-        <div
-          className="h2"
-          style={{ margin: 0, fontSize: 16, marginBottom: 8 }}
-        >
-          Tip payout
-        </div>
-        <Seg
-          value={draft.payout_mode}
-          onChange={(v) => setField('payout_mode', v)}
-          options={[
-            { value: 'both', label: 'Cash + Card' },
-            { value: 'cash_only', label: 'Cash only' },
-            { value: 'card_only', label: 'Card only' },
-          ]}
-          compact
-        />
-        <div className="note" style={{ marginTop: 6 }}>
-          Controls which inputs you see when logging a shift.
-        </div>
-      </div>
 
       {/* --- First Impression: Locations --- */}
-      <CollapsibleCard title="Locations">
+      <CollapsibleCard title="Locations & Jobs">
         <div
           style={{
             display: 'flex',
@@ -650,7 +628,6 @@ export default function SettingsPanel({
 
         {/* Primary location row */}
         <LocationRow
-          label="Primary"
           loc={primary}
           isDefault={draft.default_location_id === primary.id}
           disabled={false}
@@ -688,7 +665,6 @@ export default function SettingsPanel({
             {activeAdditional.map((loc) => (
               <LocationRow
                 key={loc.id}
-                label="Location"
                 loc={loc}
                 disabled={false}
                 archived={false}
@@ -782,6 +758,28 @@ export default function SettingsPanel({
 
       {/* --- Shift Details --- */}
       <CollapsibleCard title="Shift Details">
+        {/* --- Payout (compact segmented) --- */}
+
+        <div
+          className="h2"
+          style={{ margin: 0, fontSize: 16, marginBottom: 8 }}
+        >
+          Tip payout
+        </div>
+        <Seg
+          value={draft.payout_mode}
+          onChange={(v) => setField('payout_mode', v)}
+          options={[
+            { value: 'both', label: 'Cash + Card' },
+            { value: 'cash_only', label: 'Cash only' },
+            { value: 'card_only', label: 'Card only' },
+          ]}
+          compact
+        />
+        <div className="note" style={{ marginTop: 6 }}>
+          Controls which inputs you see when logging a shift.
+        </div>
+
         <div style={{ display: 'grid', gap: 10 }}>
           <div
             style={{
@@ -795,20 +793,6 @@ export default function SettingsPanel({
             <Switch
               checked={!!draft.track_sales}
               onChange={(v) => setField('track_sales', v)}
-            />
-          </div>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr auto',
-              alignItems: 'center',
-              gap: 8,
-            }}
-          >
-            <div>Track Hours</div>
-            <Switch
-              checked={!!draft.track_hours}
-              onChange={(v) => setField('track_hours', v)}
             />
           </div>
         </div>
@@ -1161,7 +1145,7 @@ function LocationRow({
       <div className="left">
         <div className="label">{label}</div>
         <div className="badges">
-          {isDefault && <span className="badge">Default</span>}
+          {isDefault && <span className="badge">Default Location</span>}
           {archived && <span className="badge">Archived</span>}
         </div>
       </div>
@@ -1461,14 +1445,13 @@ function hasNameConflict(allJobs, candidateName, { excludeJobId } = {}) {
 
 function JobChipActive({ job, disabled, onChangeName, onArchive }) {
   return (
-    <div className="chip">
+    <div className="job-row">
       <input
-        className="input"
+        className="job-input"
         value={job.name}
         onChange={(e) => !disabled && onChangeName?.(e.target.value)}
         placeholder="e.g., Server"
         disabled={disabled}
-        style={{ padding: '6px 10px', height: 34, fontSize: 13, width: 160 }}
       />
       <TinyIconBtn
         label="Archive"
@@ -1476,6 +1459,33 @@ function JobChipActive({ job, disabled, onChangeName, onArchive }) {
         onClick={onArchive}
         disabled={disabled}
       />
+
+      <style jsx>{`
+        .job-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          width: 100%;
+        }
+
+        .job-input {
+          flex: 1;
+          font-size: 13px;
+          padding: 6px 10px;
+          height: 34px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          background: #fff; /* white background, not gray */
+          color: var(--ink);
+        }
+
+        .job-input:disabled {
+          background: #f5f5f5;
+          color: #888;
+          cursor: not-allowed;
+        }
+      `}</style>
     </div>
   )
 }
@@ -1497,30 +1507,33 @@ function JobRowNew({
   const canSave = !disabled && !!trimmed && !hasActiveDup && !matchesArchived
 
   return (
-    <div className="newrow">
+    <div className="job-row">
       <input
-        className="input"
+        className="job-input"
         value={name}
         onChange={(e) => !disabled && setName(e.target.value)}
-        placeholder="e.g., Server"
+        placeholder="e.g., Server, Bartender"
         disabled={disabled}
-        style={{ fontSize: 14 }}
       />
-      {matchesArchived ? (
-        <TinyIconBtn
-          label="Unarchive existing"
-          onClick={() => onUnarchiveExisting?.(archivedMatch.id)}
-          disabled={disabled}
-        />
-      ) : (
-        <TinyIconBtn
-          label="Save"
-          variant="primary"
-          onClick={() => onSave?.(trimmed)}
-          disabled={!canSave}
-        />
-      )}
-      <TinyIconBtn label="Cancel" onClick={onCancel} disabled={disabled} />
+
+      <div className="actions">
+        {matchesArchived ? (
+          <TinyIconBtn
+            label="Unarchive existing"
+            onClick={() => onUnarchiveExisting?.(archivedMatch.id)}
+            disabled={disabled}
+          />
+        ) : (
+          <TinyIconBtn
+            label="Save"
+            variant="primary"
+            onClick={() => onSave?.(trimmed)}
+            disabled={!canSave}
+          />
+        )}
+        <TinyIconBtn label="Cancel" onClick={onCancel} disabled={disabled} />
+      </div>
+
       <div className="help">
         {!trimmed && <div className="note">Enter a job name to save.</div>}
         {hasActiveDup && (
@@ -1534,15 +1547,43 @@ function JobRowNew({
           </div>
         )}
       </div>
+
       <style jsx>{`
-        .newrow {
-          display: grid;
-          grid-template-columns: 1fr auto auto;
-          gap: 8px;
+        .job-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          width: 100%;
+          flex-wrap: wrap;
+        }
+
+        .job-input {
+          flex: 1;
+          font-size: 13px;
+          padding: 6px 10px;
+          height: 34px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          background: #fff;
+          color: var(--ink);
+        }
+
+        .actions {
+          display: flex;
+          gap: 6px;
           align-items: center;
         }
+
         .help {
-          grid-column: 1 / -1;
+          width: 100%;
+          margin-top: 4px;
+        }
+
+        .job-input:disabled {
+          background: #f5f5f5;
+          color: #888;
+          cursor: not-allowed;
         }
       `}</style>
     </div>

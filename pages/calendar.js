@@ -456,20 +456,32 @@ export default function CalendarPage({ theme, setTheme }) {
           </div>
         </div>
 
-        {/* Totals */}
-        <div className="two grid" style={{ marginBottom: 8 }}>
-          <div className="card">
-            <div className="note">Net</div>
-            <div className="h1">{currencyFormatter.format(totals.net)}</div>
+        {/* Compact KPI Summary */}
+        <div className="card kpi-summary compact" style={{ marginBottom: 8 }}>
+          <div className="kpi-grid">
+            <div className="kpi-item">
+              <div className="note">Net</div>
+              <div className="h1 small">
+                {currencyFormatter.format(totals.net)}
+              </div>
+            </div>
+
+            <div className="divider" />
+
+            <div className="kpi-item">
+              <div className="note">Hours</div>
+              <div className="h1 small">{totals.hours.toFixed(1)}</div>
+            </div>
+
+            <div className="divider" />
+
+            <div className="kpi-item">
+              <div className="note">Hourly</div>
+              <div className="h1 small">
+                {currencyFormatter.format(totals.eff)} /h
+              </div>
+            </div>
           </div>
-          <div className="card">
-            <div className="note">Hours</div>
-            <div className="h1">{totals.hours.toFixed(1)}</div>
-          </div>
-        </div>
-        <div className="card">
-          <div className="note">Effective hourly</div>
-          <div className="h1">{currencyFormatter.format(totals.eff)} /h</div>
         </div>
 
         {/* Weekday headers */}
@@ -875,6 +887,7 @@ export default function CalendarPage({ theme, setTheme }) {
       )}
 
       {/* Inline compact styles specific to this page */}
+
       <style jsx>{`
         /* === Calendar Grid (compact modes) === */
         :global(.cal-grid.cal-week.compact),
@@ -1115,6 +1128,58 @@ export default function CalendarPage({ theme, setTheme }) {
           margin-top: 4px;
           font-size: 13px;
           color: var(--text-muted);
+        }
+      `}</style>
+      <style jsx>{`
+        .kpi-summary.compact {
+          padding: 10px 14px;
+          border-radius: 12px;
+          border: 1px solid #e5e7eb;
+          background: #fff;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+        }
+
+        .kpi-grid {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          text-align: center;
+          gap: 8px;
+        }
+
+        .kpi-item {
+          flex: 1;
+          min-width: 80px;
+        }
+
+        .h1.small {
+          font-size: 16px;
+          font-weight: 600;
+          margin-top: 2px;
+        }
+
+        .note {
+          font-size: 12px;
+          color: #6b7280;
+        }
+
+        .divider {
+          width: 1px;
+          height: 24px;
+          background: #e5e7eb;
+          opacity: 0.8;
+        }
+
+        @media (max-width: 600px) {
+          .kpi-grid {
+            gap: 6px;
+          }
+          .h1.small {
+            font-size: 15px;
+          }
+          .divider {
+            height: 20px;
+          }
         }
       `}</style>
     </div>

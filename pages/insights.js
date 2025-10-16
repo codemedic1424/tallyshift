@@ -523,6 +523,13 @@ export default function Insights() {
         ? 'Last 3 months'
         : 'Year to date'
 
+  const compareLabel =
+    timeframe === TF.THIS_MONTH
+      ? 'v. Last Month'
+      : timeframe === TF.LAST_3
+        ? 'v. Last 3 Months'
+        : 'v. Last Year'
+
   // ---------- UI ----------
   return (
     <div className="page">
@@ -591,10 +598,16 @@ export default function Insights() {
               {netDeltaPct != null && (
                 <div
                   className="note delta"
-                  style={{ color: netDeltaPct >= 0 ? '#16a34a' : '#dc2626' }}
+                  style={{
+                    color: netDeltaPct >= 0 ? '#16a34a' : '#dc2626',
+                    fontWeight: 500,
+                  }}
                 >
                   {netDeltaPct >= 0 ? '▲' : '▼'}{' '}
-                  {Math.abs(netDeltaPct).toFixed(1)}%
+                  {Math.abs(netDeltaPct).toFixed(1)}%{'  '}
+                  <span style={{ color: '#6b7280', fontWeight: 400 }}>
+                    {compareLabel}
+                  </span>
                 </div>
               )}
             </div>
@@ -614,10 +627,16 @@ export default function Insights() {
               {effDeltaPct != null && (
                 <div
                   className="note delta"
-                  style={{ color: effDeltaPct >= 0 ? '#16a34a' : '#dc2626' }}
+                  style={{
+                    color: effDeltaPct >= 0 ? '#16a34a' : '#dc2626',
+                    fontWeight: 500,
+                  }}
                 >
                   {effDeltaPct >= 0 ? '▲' : '▼'}{' '}
-                  {Math.abs(effDeltaPct).toFixed(1)}%
+                  {Math.abs(effDeltaPct).toFixed(1)}%{'  '}
+                  <span style={{ color: '#6b7280', fontWeight: 400 }}>
+                    {compareLabel}
+                  </span>
                 </div>
               )}
             </div>
@@ -794,6 +813,21 @@ export default function Insights() {
                     agg[key].count++
                     agg[key].sumNet += net
                   }
+                  const emojiMap = {
+                    Sunny: '☀️',
+                    Clear: '☀️',
+                    Cloudy: '☁️',
+                    Overcast: '☁️',
+                    Rain: '🌧️',
+                    Rainy: '🌧️',
+                    Thunderstorm: '⛈️',
+                    Storm: '⛈️',
+                    Snow: '❄️',
+                    Windy: '💨',
+                    Fog: '🌫️',
+                    Haze: '🌤️',
+                  }
+
                   const entries = Object.entries(agg).sort(
                     (a, b) => b[1].count - a[1].count,
                   )
@@ -813,7 +847,13 @@ export default function Insights() {
                             gap: 8,
                           }}
                         >
-                          <div>{summary}</div>
+                          <div>
+                            <span style={{ marginRight: 6 }}>
+                              {emojiMap[summary] || '🌦️'}
+                            </span>
+                            {summary}
+                          </div>
+
                           <div className="note">{stats.count} shifts</div>
                           <div className="note">
                             {currencyFormatter.format(
