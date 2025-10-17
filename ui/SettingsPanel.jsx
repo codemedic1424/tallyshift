@@ -761,12 +761,7 @@ export default function SettingsPanel({
       <CollapsibleCard title="Shift Details">
         {/* --- Payout (compact segmented) --- */}
 
-        <div
-          className="h2"
-          style={{ margin: 0, fontSize: 16, marginBottom: 8 }}
-        >
-          Tip payout
-        </div>
+        <div style={{ marginBottom: 10 }}>Tip Payout</div>
         <Seg
           value={draft.payout_mode}
           onChange={(v) => setField('payout_mode', v)}
@@ -780,6 +775,14 @@ export default function SettingsPanel({
         <div className="note" style={{ marginTop: 6 }}>
           Controls which inputs you see when logging a shift.
         </div>
+
+        {/* --- Divider line --- */}
+        <div
+          style={{
+            borderTop: '1px solid #ddd',
+            margin: '12px 0',
+          }}
+        />
 
         <div style={{ display: 'grid', gap: 10 }}>
           <div
@@ -797,20 +800,42 @@ export default function SettingsPanel({
             />
           </div>
         </div>
+        {/* --- Divider line --- */}
+        <div
+          style={{
+            borderTop: '1px solid #ddd',
+            margin: '12px 0',
+          }}
+        />
+        <div style={{ marginBottom: 10 }}>Default Tip Out</div>
+        <label className="field">
+          <span className="field-label">Default tip-out % (optional)</span>
+          <input
+            className={`input ${highlightChanges && changed('default_tipout_pct') ? 'field-changed' : ''}`}
+            type="number"
+            min="0"
+            max="100"
+            step="0.5"
+            value={draft.default_tipout_pct ?? ''}
+            placeholder="e.g., 3"
+            onChange={(e) => {
+              const v =
+                e.target.value === ''
+                  ? null
+                  : Math.max(0, Math.min(100, Number(e.target.value)))
+              setField('default_tipout_pct', v)
+            }}
+          />
+        </label>
       </CollapsibleCard>
 
       {/* --- Advanced --- */}
       <CollapsibleCard title="Advanced">
-        <div
-          className="h2"
-          style={{ margin: 0, fontSize: 16, marginBottom: 8 }}
-        >
-          Advanced
-        </div>
-        <div className="two grid" style={{ gap: 10 }}>
-          <label className="field">
+        <div className="grid" style={{ gap: 10, gridTemplateColumns: '1fr' }}>
+          <label className="field" style={{ width: '100%' }}>
             <span className="field-label">Currency</span>
             <select
+              style={{ width: '100%' }}
               className={`input ${highlightChanges && changed('currency') ? 'field-changed' : ''}`}
               value={draft.currency}
               onChange={(e) => setField('currency', e.target.value)}
@@ -822,27 +847,9 @@ export default function SettingsPanel({
               <option value="AUD">AUD - $</option>
             </select>
           </label>
-          <label className="field">
-            <span className="field-label">Default tip-out % (optional)</span>
-            <input
-              className={`input ${highlightChanges && changed('default_tipout_pct') ? 'field-changed' : ''}`}
-              type="number"
-              min="0"
-              max="100"
-              step="0.5"
-              value={draft.default_tipout_pct ?? ''}
-              placeholder="e.g., 3"
-              onChange={(e) => {
-                const v =
-                  e.target.value === ''
-                    ? null
-                    : Math.max(0, Math.min(100, Number(e.target.value)))
-                setField('default_tipout_pct', v)
-              }}
-            />
-          </label>
         </div>
       </CollapsibleCard>
+
       {/* --- Pro Features (collapsible) --- */}
       <div className="ts-pro-card" id="pro-features-card">
         <button
@@ -933,6 +940,14 @@ export default function SettingsPanel({
               Requires an address per active location (we’ll look up coordinates
               automatically).
             </div>
+
+            {/* --- Divider line --- */}
+            <div
+              style={{
+                borderTop: '1px solid #ddd',
+                margin: '12px 0',
+              }}
+            />
             {/* Multi-locations toggle + default selector */}
 
             <div
