@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useUser } from '../lib/useUser'
 import { useSettings } from '../lib/useSettings'
 import UpgradeModal from './UpgradeModal'
+import AddressAutocomplete from './AddressAutocomplete'
 
 /* ---------------- utils (unchanged behavior) ---------------- */
 
@@ -1288,81 +1289,18 @@ function LocationRow({
                 <span className="field-label">
                   Address (required when weather tracking is on)
                 </span>
-                <input
-                  className="input"
+                <AddressAutocomplete
                   value={loc.address ?? ''}
-                  onChange={(e) =>
-                    !disabled && onChangeAddress?.(e.target.value)
-                  }
-                  placeholder="123 Main St, City, ST"
+                  onChangeAddress={(v) => !disabled && onChangeAddress?.(v)}
+                  onSetCoords={(coords) => !disabled && onSetCoords?.(coords)}
                   disabled={disabled}
+                  // country="us" // remove or change if needed
                 />
+                <div className="note" style={{ marginTop: 6 }}>
+                  Coordinates are captured automatically once you select an
+                  address.
+                </div>
               </label>
-            </div>
-            <div
-              className="line tight"
-              style={{ gridTemplateColumns: '1fr 1fr auto' }}
-            >
-              <label className="field" style={{ margin: 0 }}>
-                <span className="field-label">Latitude</span>
-                <input
-                  className="input"
-                  type="number"
-                  step="0.000001"
-                  value={loc.lat ?? ''}
-                  onChange={(e) =>
-                    !disabled &&
-                    onSetCoords?.({
-                      lat:
-                        e.target.value === '' ? null : Number(e.target.value),
-                      lon: typeof loc.lon === 'number' ? loc.lon : null,
-                    })
-                  }
-                  disabled={disabled}
-                />
-              </label>
-              <label className="field" style={{ margin: 0 }}>
-                <span className="field-label">Longitude</span>
-                <input
-                  className="input"
-                  type="number"
-                  step="0.000001"
-                  value={loc.lon ?? ''}
-                  onChange={(e) =>
-                    !disabled &&
-                    onSetCoords?.({
-                      lat: typeof loc.lat === 'number' ? loc.lat : null,
-                      lon:
-                        e.target.value === '' ? null : Number(e.target.value),
-                    })
-                  }
-                  disabled={disabled}
-                />
-              </label>
-              <TinyIconBtn
-                label="Lookup coords"
-                variant="primary"
-                disabled={disabled}
-                onClick={async () => {
-                  const address = String(loc.address || '').trim()
-                  if (!address) return alert('Enter an address first.')
-                  try {
-                    const resp = await fetch('/api/geocode', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ address }),
-                    })
-                    const data = await resp.json()
-                    if (!data?.ok || !data.found) {
-                      alert('Could not find that address.')
-                      return
-                    }
-                    onSetCoords?.({ lat: data.lat, lon: data.lon })
-                  } catch (e) {
-                    alert('Geocoding failed. Try again.')
-                  }
-                }}
-              />
             </div>
           </div>
         )}

@@ -5,6 +5,7 @@ import { useRouter } from 'next/router'
 import { UserProvider, useUser } from '../lib/useUser'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import Head from 'next/head'
+import Script from 'next/script'
 
 const PUBLIC_ROUTES = ['/login', '/reset', '/reset-sent']
 
@@ -65,7 +66,7 @@ function EnvironmentBadge() {
 }
 
 export default function MyApp({ Component, pageProps }) {
-  const router = useRouter() // ✅ add this
+  const router = useRouter()
 
   // 🧹 Cleanup for old Supabase session keys
   useEffect(() => {
@@ -82,6 +83,12 @@ export default function MyApp({ Component, pageProps }) {
         <Head>
           <meta name="viewport" content="width=device-width, initial-scale=1" />
         </Head>
+
+        <Script
+          id="google-maps-places"
+          src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}&libraries=places`}
+          strategy="afterInteractive"
+        />
 
         <div id="app-viewport" className="app-viewport">
           <Component {...pageProps} />
