@@ -269,6 +269,35 @@ export default function ShiftDetailsModal({
                     </b>
                   </div>
                 )}
+                {/* --- Estimated Tip % (view mode) --- */}
+                {shift.sales > 0 && (
+                  <div
+                    style={{
+                      margin: '8px 0 0',
+                      padding: '8px 12px',
+                      borderRadius: 8,
+                      background: '#f9fafb',
+                      border: '1px solid #e5e7eb',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      fontSize: 14,
+                      fontWeight: 500,
+                    }}
+                  >
+                    <span>Est. Tip %</span>
+                    <span style={{ fontWeight: 700, color: '#16a34a' }}>
+                      {(
+                        ((Number(shift.cash_tips || 0) +
+                          Number(shift.card_tips || 0) -
+                          Number(shift.tip_out_total || 0)) /
+                          Number(shift.sales || 1)) *
+                        100
+                      ).toFixed(1)}
+                      %
+                    </span>
+                  </div>
+                )}
               </div>
               {trackDiscounts && (
                 <div style={{ marginTop: 16 }}>
@@ -485,6 +514,36 @@ export default function ShiftDetailsModal({
                   )}
                 </label>
               )}
+              {/* --- Estimated Tip % (edit mode) --- */}
+              {editSales && Number(editSales) > 0 && (
+                <div
+                  style={{
+                    margin: '8px 0 12px',
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    background: '#f9fafb',
+                    border: '1px solid #e5e7eb',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    fontSize: 14,
+                    fontWeight: 500,
+                  }}
+                >
+                  <span>Est. Tip %</span>
+                  <span style={{ fontWeight: 700, color: '#16a34a' }}>
+                    {(
+                      ((Number(editCash || 0) +
+                        Number(editCard || 0) -
+                        Number(editTipOut || 0)) /
+                        Number(editSales || 1)) *
+                      100
+                    ).toFixed(1)}
+                    %
+                  </span>
+                </div>
+              )}
+
               {trackDiscounts && (
                 <div style={{ display: 'grid', gap: 12 }}>
                   <div

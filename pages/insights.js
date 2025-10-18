@@ -34,7 +34,11 @@ function AnimatedNumber({ value, formatter }) {
         fontSize: done ? '1.15em' : '1em', // adds that little size pop
       }}
     >
-      {val.to((v) => (formatter ? formatter(v) : v.toFixed(2)))}
+      {val.to((v) =>
+        formatter
+          ? formatter(Number(v.toFixed(2))) + (v % 1 === 0 ? '.00' : '') // 👈 add .00 if it's a whole number
+          : v.toFixed(2),
+      )}
     </animated.span>
   )
 }

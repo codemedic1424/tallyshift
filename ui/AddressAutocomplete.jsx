@@ -46,9 +46,9 @@ export default function AddressAutocomplete({
 
   const handleSelect = (prediction) => {
     if (!placesService) return
-    setIsLocked(true) // lock so menu stays hidden
-    setFocused(false) // mark not focused
-    setSuggestions([]) // hide instantly
+    setIsLocked(true)
+    setFocused(false)
+    setSuggestions([])
 
     placesService.getDetails(
       { placeId: prediction.place_id },
@@ -59,18 +59,21 @@ export default function AddressAutocomplete({
         const lon = Number(place.geometry.location.lng())
         const formatted = place.formatted_address
 
-        // Fill input
+        console.log('📍 Selected verified address:', formatted)
+
+        // ✅ Fill input with verified full address
         setLocalValue(formatted)
 
-        // Push formatted address up once (not twice)
-        if (onChangeAddress) onChangeAddress(formatted)
+        // ✅ Send full address to parent
+        onChangeAddress?.(formatted)
 
-        // Push coords
-        onSetCoords?.({ lat, lon })
+        // ✅ Send coords and formatted together
+        onSetCoords?.({ lat, lon, formatted })
+
+        // ✅ Store local coords for feedback UI
         setCoords({ lat, lon })
-        console.log('Sending coords to parent:', { lat, lon })
 
-        // Blur input after paint (prevents re-opening)
+        // Prevent reopening dropdown
         requestAnimationFrame(() => inputRef.current?.blur())
       },
     )
@@ -100,9 +103,9 @@ export default function AddressAutocomplete({
         onChange={(e) => {
           const val = e.target.value
           setLocalValue(val)
-          setIsLocked(false) // user is typing again → unlock suggestions
+          setIsLocked(false)
           if (!val) setSuggestions([])
-          !disabled && onChangeAddress?.(val)
+          // ❌ Do NOT call onChangeAddress here — wait until user picks from dropdown
         }}
         placeholder={placeholder}
         disabled={disabled}

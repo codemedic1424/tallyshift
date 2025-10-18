@@ -546,6 +546,36 @@ export default function AddShiftModal({
             </div>
           </div>
 
+          {/* --- Estimated Tip % --- */}
+          {sales && Number(sales) > 0 && (
+            <div
+              style={{
+                margin: '8px 0 12px',
+                padding: '8px 12px',
+                borderRadius: 8,
+                background: '#f9fafb',
+                border: '1px solid #e5e7eb',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                fontSize: 14,
+                fontWeight: 500,
+              }}
+            >
+              <span>Est. Tip %</span>
+              <span style={{ fontWeight: 700, color: '#16a34a' }}>
+                {(
+                  ((Number(cash || 0) +
+                    Number(card || 0) -
+                    Number(tipOut || 0)) /
+                    Number(sales || 1)) *
+                  100
+                ).toFixed(1)}
+                %
+              </span>
+            </div>
+          )}
+
           {/* Additional Info */}
           {settings?.track_sections && (
             <div style={{ display: 'grid', gap: 12 }}>

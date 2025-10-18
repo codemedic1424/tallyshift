@@ -1,5 +1,5 @@
 // ui/SettingsPanel.jsx
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { useUser } from '../lib/useUser'
 import { useSettings } from '../lib/useSettings'
 import UpgradeModal from './UpgradeModal'
@@ -256,6 +256,8 @@ function TinyIconBtn({ label, variant = 'neutral', onClick, disabled, title }) {
 /* ---------------- main component ---------------- */
 function CollapsibleCard({ title, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen)
+  const contentRef = useRef(null)
+
   return (
     <div className="collapsible-card">
       <button
@@ -267,7 +269,19 @@ function CollapsibleCard({ title, children, defaultOpen = false }) {
         <span className="collapsible-title">{title}</span>
         <span className={`arrow ${open ? 'open' : ''}`}>▾</span>
       </button>
-      {open && <div className="collapsible-content">{children}</div>}
+
+      <div
+        ref={contentRef}
+        className={`collapsible-content-wrapper ${open ? 'open' : ''}`}
+        style={{
+          maxHeight: open
+            ? `${contentRef.current?.scrollHeight || 0}px`
+            : '0px',
+        }}
+      >
+        <div className="collapsible-content">{children}</div>
+      </div>
+
       <style jsx>{`
         .collapsible-card {
           border: 1px solid var(--border);
@@ -277,6 +291,7 @@ function CollapsibleCard({ title, children, defaultOpen = false }) {
           overflow: hidden;
           transition: all 0.25s ease;
         }
+
         .collapsible-header {
           width: 100%;
           background: #f9fafb;
@@ -292,31 +307,37 @@ function CollapsibleCard({ title, children, defaultOpen = false }) {
           cursor: pointer;
           transition: background 0.2s ease;
         }
+
         .collapsible-header:hover {
           background: #f3f4f6;
         }
+
         .arrow {
-          transition: transform 0.2s ease;
+          transition: transform 0.25s ease;
           color: #6b7280;
         }
+
         .arrow.open {
           transform: rotate(180deg);
         }
+
+        .collapsible-content-wrapper {
+          overflow: hidden;
+          max-height: 0;
+          opacity: 0;
+          transition:
+            max-height 0.35s ease,
+            opacity 0.3s ease;
+        }
+
+        .collapsible-content-wrapper.open {
+          opacity: 1;
+        }
+
         .collapsible-content {
           padding: 16px 18px;
           border-top: 1px solid var(--border);
           background: #fff;
-          animation: fadeIn 0.25s ease;
-        }
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(-4px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
         }
       `}</style>
     </div>
@@ -666,311 +687,6 @@ export default function SettingsPanel({
           </div>
         </div>
       </div>
-
-      {/* --- First Impression: Locations --- */}
-      <CollapsibleCard title="Locations & Jobs">
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'flex-end',
-            alignItems: 'center',
-            gap: 8,
-            flexWrap: 'wrap',
-          }}
-        >
-          <div className="note">Show archived</div>
-          <Switch checked={showArchivedJobs} onChange={setShowArchivedJobs} />
-        </div>
-
-        {/* Primary location row */}
-        <LocationRow
-          loc={primary}
-          isDefault={draft.default_location_id === primary.id}
-          disabled={false}
-          showArchivedJobs={showArchivedJobs}
-          showWeatherFields={!!draft.track_weather}
-          highlightMissingName={
-            highlightChanges && !String(primary?.name || '').trim()
-          }
-          onChangeName={(v) =>
-            updateLocation(primary.id, (l) => ({ ...l, name: v }))
-          }
-          onChangeAddress={(v) =>
-            updateLocation(primary.id, (l) => ({
-              ...l,
-              address: v,
-              lat: l.lat ?? null,
-              lon: l.lon ?? null,
-            }))
-          }
-          onSetCoords={(coords) => {
-            console.log('📍 Got coords from autocomplete:', coords)
-            updateLocation(primary.id, (l) => ({
-              ...l,
-              lat: Number(coords.lat),
-              lon: Number(coords.lon),
-            }))
-          }}
-          onToggleTrackJobs={(v) =>
-            updateLocation(primary.id, (l) => ({ ...l, track_jobs: v }))
-          }
-          onAddJob={() => addJob(primary.id)}
-          onChangeJob={(jobId, name) =>
-            updateJob(primary.id, jobId, (j) => ({ ...j, name }))
-          }
-          onArchiveJob={(jobId) => toggleArchiveJob(primary.id, jobId)}
-          onRemoveNewJob={(jobId) => removeJob(primary.id, jobId)}
-          onFinalizeNewJob={(jobId, name) =>
-            finalizeNewJob(primary.id, jobId, name)
-          }
-        />
-
-        {/* Additional (active) */}
-        {draft.multiple_locations && activeAdditional.length > 0 && (
-          <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
-            {activeAdditional.map((loc) => (
-              <LocationRow
-                key={loc.id}
-                loc={loc}
-                disabled={false}
-                archived={false}
-                showArchivedJobs={showArchivedJobs}
-                showWeatherFields={!!draft.track_weather}
-                isDefault={draft.default_location_id === loc.id}
-                onMakeDefault={() => setField('default_location_id', loc.id)}
-                onChangeName={(v) =>
-                  updateLocation(loc.id, (l) => ({ ...l, name: v }))
-                }
-                onChangeAddress={(v) =>
-                  updateLocation(loc.id, (l) => ({
-                    ...l,
-                    address: v,
-                    lat: l.lat ?? null,
-                    lon: l.lon ?? null,
-                  }))
-                }
-                onSetCoords={(coords) => {
-                  console.log('📍 Got coords from autocomplete:', coords)
-                  updateLocation(primary.id, (l) => ({
-                    ...l,
-                    lat: Number(coords.lat),
-                    lon: Number(coords.lon),
-                  }))
-                }}
-                onToggleTrackJobs={(v) =>
-                  updateLocation(loc.id, (l) => ({ ...l, track_jobs: v }))
-                }
-                onToggleArchive={() => toggleArchiveLocation(loc.id)}
-                onAddJob={() => addJob(loc.id)}
-                onChangeJob={(jobId, name) =>
-                  updateJob(loc.id, jobId, (j) => ({ ...j, name }))
-                }
-                onArchiveJob={(jobId) => toggleArchiveJob(loc.id, jobId)}
-                onRemoveNewJob={(jobId) => removeJob(loc.id, jobId)}
-                onFinalizeNewJob={(jobId, name) =>
-                  finalizeNewJob(loc.id, jobId, name)
-                }
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Archived locations */}
-        {draft.multiple_locations &&
-          showArchivedJobs &&
-          archivedAdditional.length > 0 && (
-            <div className="card" style={{ marginTop: 12, padding: 10 }}>
-              <div className="note" style={{ marginBottom: 6 }}>
-                Archived locations
-              </div>
-              <div style={{ display: 'grid', gap: 8 }}>
-                {archivedAdditional.map((loc) => (
-                  <LocationRow
-                    key={loc.id}
-                    label="Location (archived)"
-                    loc={loc}
-                    disabled
-                    archived
-                    showArchivedJobs
-                    showWeatherFields={!!draft.track_weather}
-                    onToggleArchive={() => toggleArchiveLocation(loc.id)} // Unarchive
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-      </CollapsibleCard>
-
-      {/* --- Calendar & Form in a clean two-up --- */}
-      <CollapsibleCard title="Calendar">
-        <div className="two grid" style={{ gap: 10 }}>
-          <label className="field">
-            <span className="field-label">Default view</span>
-            <select
-              className={`input ${highlightChanges && changed('default_calendar_view') ? 'field-changed' : ''}`}
-              value={draft.default_calendar_view}
-              onChange={(e) =>
-                setField('default_calendar_view', e.target.value)
-              }
-            >
-              <option value="day">Day</option>
-              <option value="week">Week</option>
-              <option value="month">Month</option>
-            </select>
-          </label>
-          <label className="field">
-            <span className="field-label">Week starts on</span>
-            <select
-              className={`input ${highlightChanges && changed('week_start') ? 'field-changed' : ''}`}
-              value={draft.week_start}
-              onChange={(e) => setField('week_start', e.target.value)}
-            >
-              <option value="sunday">Sunday</option>
-              <option value="monday">Monday</option>
-            </select>
-          </label>
-        </div>
-      </CollapsibleCard>
-
-      {/* --- Shift Details --- */}
-      <CollapsibleCard title="Shift Details">
-        {/* --- Payout (compact segmented) --- */}
-
-        <div style={{ marginBottom: 10 }}>Tip Payout</div>
-        <Seg
-          value={draft.payout_mode}
-          onChange={(v) => setField('payout_mode', v)}
-          options={[
-            { value: 'both', label: 'Cash + Card' },
-            { value: 'cash_only', label: 'Cash only' },
-            { value: 'card_only', label: 'Card only' },
-          ]}
-          compact
-        />
-        <div className="note" style={{ marginTop: 6 }}>
-          Controls which inputs you see when logging a shift.
-        </div>
-
-        {/* --- Divider line --- */}
-        <div
-          style={{
-            borderTop: '1px solid #ddd',
-            margin: '12px 0',
-          }}
-        />
-
-        <div style={{ display: 'grid', gap: 10 }}>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr auto',
-              alignItems: 'center',
-              gap: 8,
-            }}
-          >
-            <div>Track Sales</div>
-            <Switch
-              checked={!!draft.track_sales}
-              onChange={(v) => setField('track_sales', v)}
-            />
-          </div>
-        </div>
-        {/* --- Divider line --- */}
-        <div
-          style={{
-            borderTop: '1px solid #ddd',
-            margin: '12px 0',
-          }}
-        />
-        <div style={{ marginBottom: 10, display: 'grid', gap: 8 }}>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr auto',
-              alignItems: 'center',
-              gap: 8,
-            }}
-          >
-            <div>Track Tip Out</div>
-            <Switch
-              checked={!!draft.default_tipout_enabled}
-              onChange={(v) => setField('default_tipout_enabled', v)}
-              title="Use Default Tip-Out"
-            />
-          </div>
-
-          {draft.default_tipout_enabled && (
-            <label className="field" style={{ marginTop: 6 }}>
-              <span className="field-label">Default tip-out %</span>
-              <input
-                className={`input ${
-                  highlightChanges && changed('default_tipout_pct')
-                    ? 'field-changed'
-                    : ''
-                }`}
-                type="number"
-                min="0"
-                max="100"
-                step="0.5"
-                value={draft.default_tipout_pct ?? ''}
-                placeholder="e.g., 3"
-                onChange={(e) => {
-                  const v =
-                    e.target.value === ''
-                      ? null
-                      : Math.max(0, Math.min(100, Number(e.target.value)))
-                  setField('default_tipout_pct', v)
-                }}
-              />
-            </label>
-          )}
-        </div>
-        {/* --- Divider line --- */}
-        <div
-          style={{
-            borderTop: '1px solid #ddd',
-            margin: '12px 0',
-          }}
-        />
-        {/* Track Discounts */}
-        <div
-          style={{
-            marginBottom: 10,
-            display: 'grid',
-            gridTemplateColumns: '1fr auto',
-            alignItems: 'center',
-            gap: 8,
-          }}
-        >
-          <div>Track Discounts?</div>
-          <Switch
-            checked={!!draft.track_discounts}
-            onChange={(v) => setField('track_discounts', v)}
-          />
-        </div>
-      </CollapsibleCard>
-
-      {/* --- Advanced --- */}
-      <CollapsibleCard title="Advanced">
-        <div className="grid" style={{ gap: 10, gridTemplateColumns: '1fr' }}>
-          <label className="field" style={{ width: '100%' }}>
-            <span className="field-label">Currency</span>
-            <select
-              style={{ width: '100%' }}
-              className={`input ${highlightChanges && changed('currency') ? 'field-changed' : ''}`}
-              value={draft.currency}
-              onChange={(e) => setField('currency', e.target.value)}
-            >
-              <option value="USD">USD - $</option>
-              <option value="CAD">CAD - $</option>
-              <option value="EUR">EUR - €</option>
-              <option value="GBP">GBP - £</option>
-              <option value="AUD">AUD - $</option>
-            </select>
-          </label>
-        </div>
-      </CollapsibleCard>
-
       {/* --- Pro Features (collapsible) --- */}
       <div className="ts-pro-card" id="pro-features-card">
         <button
@@ -1382,6 +1098,316 @@ export default function SettingsPanel({
           </div>
         )}
       </div>
+      {/* --- First Impression: Locations --- */}
+      <CollapsibleCard title="Locations & Jobs">
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            alignItems: 'center',
+            gap: 8,
+            flexWrap: 'wrap',
+          }}
+        >
+          <div className="note">Show archived</div>
+          <Switch checked={showArchivedJobs} onChange={setShowArchivedJobs} />
+        </div>
+
+        {/* Primary location row */}
+        <LocationRow
+          loc={primary}
+          isDefault={draft.default_location_id === primary.id}
+          disabled={false}
+          showArchivedJobs={showArchivedJobs}
+          showWeatherFields={!!draft.track_weather}
+          highlightMissingName={
+            highlightChanges && !String(primary?.name || '').trim()
+          }
+          onChangeName={(v) =>
+            updateLocation(primary.id, (l) => ({ ...l, name: v }))
+          }
+          onChangeAddress={(v) =>
+            updateLocation(primary.id, (l) => ({
+              ...l,
+              address: v,
+              lat: l.lat ?? null,
+              lon: l.lon ?? null,
+            }))
+          }
+          onSetCoords={(coords) => {
+            console.log('📍 Got coords from autocomplete:', coords)
+            updateLocation(primary.id, (l) => ({
+              ...l,
+              lat: Number(coords.lat),
+              lon: Number(coords.lon),
+              ...(coords.formatted ? { address: coords.formatted } : {}), // ✅ store formatted address if available
+            }))
+          }}
+          onToggleTrackJobs={(v) =>
+            updateLocation(primary.id, (l) => ({ ...l, track_jobs: v }))
+          }
+          onAddJob={() => addJob(primary.id)}
+          onChangeJob={(jobId, name) =>
+            updateJob(primary.id, jobId, (j) => ({ ...j, name }))
+          }
+          onArchiveJob={(jobId) => toggleArchiveJob(primary.id, jobId)}
+          onRemoveNewJob={(jobId) => removeJob(primary.id, jobId)}
+          onFinalizeNewJob={(jobId, name) =>
+            finalizeNewJob(primary.id, jobId, name)
+          }
+        />
+
+        {/* Additional (active) */}
+        {draft.multiple_locations && activeAdditional.length > 0 && (
+          <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
+            {activeAdditional.map((loc) => (
+              <LocationRow
+                key={loc.id}
+                loc={loc}
+                disabled={false}
+                archived={false}
+                showArchivedJobs={showArchivedJobs}
+                showWeatherFields={!!draft.track_weather}
+                isDefault={draft.default_location_id === loc.id}
+                onMakeDefault={() => setField('default_location_id', loc.id)}
+                onChangeName={(v) =>
+                  updateLocation(loc.id, (l) => ({ ...l, name: v }))
+                }
+                onChangeAddress={(v) =>
+                  updateLocation(loc.id, (l) => ({
+                    ...l,
+                    address: v,
+                    lat: l.lat ?? null,
+                    lon: l.lon ?? null,
+                  }))
+                }
+                onSetCoords={(coords) => {
+                  console.log(
+                    '📍 Got coords from autocomplete for',
+                    loc.name,
+                    loc.id,
+                    coords,
+                  )
+                  updateLocation(loc.id, (l) => ({
+                    ...l,
+                    lat: Number(coords.lat),
+                    lon: Number(coords.lon),
+                    ...(coords.formatted ? { address: coords.formatted } : {}),
+                  }))
+                }}
+                onToggleTrackJobs={(v) =>
+                  updateLocation(loc.id, (l) => ({ ...l, track_jobs: v }))
+                }
+                onToggleArchive={() => toggleArchiveLocation(loc.id)}
+                onAddJob={() => addJob(loc.id)}
+                onChangeJob={(jobId, name) =>
+                  updateJob(loc.id, jobId, (j) => ({ ...j, name }))
+                }
+                onArchiveJob={(jobId) => toggleArchiveJob(loc.id, jobId)}
+                onRemoveNewJob={(jobId) => removeJob(loc.id, jobId)}
+                onFinalizeNewJob={(jobId, name) =>
+                  finalizeNewJob(loc.id, jobId, name)
+                }
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Archived locations */}
+        {draft.multiple_locations &&
+          showArchivedJobs &&
+          archivedAdditional.length > 0 && (
+            <div className="card" style={{ marginTop: 12, padding: 10 }}>
+              <div className="note" style={{ marginBottom: 6 }}>
+                Archived locations
+              </div>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {archivedAdditional.map((loc) => (
+                  <LocationRow
+                    key={loc.id}
+                    label="Location (archived)"
+                    loc={loc}
+                    disabled
+                    archived
+                    showArchivedJobs
+                    showWeatherFields={!!draft.track_weather}
+                    onToggleArchive={() => toggleArchiveLocation(loc.id)} // Unarchive
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+      </CollapsibleCard>
+
+      {/* --- Calendar & Form in a clean two-up --- */}
+      <CollapsibleCard title="Calendar">
+        <div className="two grid" style={{ gap: 10 }}>
+          <label className="field">
+            <span className="field-label">Default view</span>
+            <select
+              className={`input ${highlightChanges && changed('default_calendar_view') ? 'field-changed' : ''}`}
+              value={draft.default_calendar_view}
+              onChange={(e) =>
+                setField('default_calendar_view', e.target.value)
+              }
+            >
+              <option value="day">Day</option>
+              <option value="week">Week</option>
+              <option value="month">Month</option>
+            </select>
+          </label>
+          <label className="field">
+            <span className="field-label">Week starts on</span>
+            <select
+              className={`input ${highlightChanges && changed('week_start') ? 'field-changed' : ''}`}
+              value={draft.week_start}
+              onChange={(e) => setField('week_start', e.target.value)}
+            >
+              <option value="sunday">Sunday</option>
+              <option value="monday">Monday</option>
+            </select>
+          </label>
+        </div>
+      </CollapsibleCard>
+
+      {/* --- Shift Details --- */}
+      <CollapsibleCard title="Shift Details">
+        {/* --- Payout (compact segmented) --- */}
+
+        <div style={{ marginBottom: 10 }}>Tip Payout</div>
+        <Seg
+          value={draft.payout_mode}
+          onChange={(v) => setField('payout_mode', v)}
+          options={[
+            { value: 'both', label: 'Cash + Card' },
+            { value: 'cash_only', label: 'Cash only' },
+            { value: 'card_only', label: 'Card only' },
+          ]}
+          compact
+        />
+        <div className="note" style={{ marginTop: 6 }}>
+          Controls which inputs you see when logging a shift.
+        </div>
+
+        {/* --- Divider line --- */}
+        <div
+          style={{
+            borderTop: '1px solid #ddd',
+            margin: '12px 0',
+          }}
+        />
+
+        <div style={{ display: 'grid', gap: 10 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr auto',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <div>Track Sales</div>
+            <Switch
+              checked={!!draft.track_sales}
+              onChange={(v) => setField('track_sales', v)}
+            />
+          </div>
+        </div>
+        {/* --- Divider line --- */}
+        <div
+          style={{
+            borderTop: '1px solid #ddd',
+            margin: '12px 0',
+          }}
+        />
+        <div style={{ marginBottom: 10, display: 'grid', gap: 8 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr auto',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <div>Track Tip Out</div>
+            <Switch
+              checked={!!draft.default_tipout_enabled}
+              onChange={(v) => setField('default_tipout_enabled', v)}
+              title="Use Default Tip-Out"
+            />
+          </div>
+
+          {draft.default_tipout_enabled && (
+            <label className="field" style={{ marginTop: 6 }}>
+              <span className="field-label">Default tip-out %</span>
+              <input
+                className={`input ${
+                  highlightChanges && changed('default_tipout_pct')
+                    ? 'field-changed'
+                    : ''
+                }`}
+                type="number"
+                min="0"
+                max="100"
+                step="0.5"
+                value={draft.default_tipout_pct ?? ''}
+                placeholder="e.g., 3"
+                onChange={(e) => {
+                  const v =
+                    e.target.value === ''
+                      ? null
+                      : Math.max(0, Math.min(100, Number(e.target.value)))
+                  setField('default_tipout_pct', v)
+                }}
+              />
+            </label>
+          )}
+        </div>
+        {/* --- Divider line --- */}
+        <div
+          style={{
+            borderTop: '1px solid #ddd',
+            margin: '12px 0',
+          }}
+        />
+        {/* Track Discounts */}
+        <div
+          style={{
+            marginBottom: 10,
+            display: 'grid',
+            gridTemplateColumns: '1fr auto',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <div>Track Discounts?</div>
+          <Switch
+            checked={!!draft.track_discounts}
+            onChange={(v) => setField('track_discounts', v)}
+          />
+        </div>
+      </CollapsibleCard>
+
+      {/* --- Advanced --- */}
+      <CollapsibleCard title="Advanced">
+        <div className="grid" style={{ gap: 10, gridTemplateColumns: '1fr' }}>
+          <label className="field" style={{ width: '100%' }}>
+            <span className="field-label">Currency</span>
+            <select
+              style={{ width: '100%' }}
+              className={`input ${highlightChanges && changed('currency') ? 'field-changed' : ''}`}
+              value={draft.currency}
+              onChange={(e) => setField('currency', e.target.value)}
+            >
+              <option value="USD">USD - $</option>
+              <option value="CAD">CAD - $</option>
+              <option value="EUR">EUR - €</option>
+              <option value="GBP">GBP - £</option>
+              <option value="AUD">AUD - $</option>
+            </select>
+          </label>
+        </div>
+      </CollapsibleCard>
 
       {/* Sticky actions (bottom) */}
       <div className="settings-actions">
