@@ -369,6 +369,21 @@ export default function Insights() {
   const prevEff = effHourly(compareRows)
   const netDeltaPct = prevNet > 0 ? ((curNet - prevNet) / prevNet) * 100 : null
   const effDeltaPct = prevEff > 0 ? ((curEff - prevEff) / prevEff) * 100 : null
+  // --- Tip % calculation ---
+  const sumSales = (rs) => rs.reduce((a, r) => a + Number(r.sales || 0), 0)
+
+  const curSales = sumSales(rows)
+  const prevSales = sumSales(compareRows)
+
+  const curTipPct = curSales > 0 ? ((curNet / curSales) * 100).toFixed(1) : 0
+  const prevTipPct =
+    prevSales > 0 ? ((prevNet / prevSales) * 100).toFixed(1) : 0
+
+  const tipPctDelta =
+    prevTipPct > 0 ? ((curTipPct - prevTipPct) / prevTipPct) * 100 : null
+
+  // ✅ overall average tip % for comparison in Location Breakdown
+  const overallTipPct = curSales > 0 ? (curNet / curSales) * 100 : 0
 
   // projection only for THIS_MONTH
   const showProjection = timeframe === TF.THIS_MONTH
@@ -574,7 +589,6 @@ export default function Insights() {
             </button>
           </div>
         </div>
-
         {/* Combined KPI Card */}
         <div className="card kpi-summary">
           <div
@@ -619,8 +633,26 @@ export default function Insights() {
             <div className="divider" />
 
             <div className="kpi-item">
-              <div className="note">Hours</div>
-              <div className="h1">{curHours.toFixed(1)}</div>
+              <div className="note">Tip %</div>
+              <div className="h1">
+                {curSales > 0 ? Number(curTipPct).toFixed(1) + '%' : '—'}
+              </div>
+
+              {tipPctDelta != null && (
+                <div
+                  className="note delta"
+                  style={{
+                    color: tipPctDelta >= 0 ? '#16a34a' : '#dc2626',
+                    fontWeight: 500,
+                  }}
+                >
+                  {tipPctDelta >= 0 ? '▲' : '▼'}{' '}
+                  {Math.abs(tipPctDelta).toFixed(1)}%{'  '}
+                  <span style={{ color: '#6b7280', fontWeight: 400 }}>
+                    {compareLabel}
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="divider" />
@@ -646,7 +678,6 @@ export default function Insights() {
             </div>
           </div>
         </div>
-
         {/* Pace + Sparkline */}
         <div className="two grid" style={{ gap: 12 }}>
           <PaceCard
@@ -669,7 +700,6 @@ export default function Insights() {
             </div>
           </div>
         </div>
-
         {/* Cash vs Card — only show if both are tracked */}
         {payoutMode === 'both' && (
           <div className="card">
@@ -740,7 +770,6 @@ export default function Insights() {
             )}
           </div>
         )}
-
         {/* Day-of-week performance */}
         <div className="card">
           <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
@@ -813,10 +842,33 @@ export default function Insights() {
                       Number(r.cash_tips || 0) +
                       Number(r.card_tips || 0) -
                       Number(r.tip_out_total || 0)
-                    if (!agg[key]) agg[key] = { count: 0, sumNet: 0 }
+                    const sales = Number(r.sales || 0)
+                    if (!agg[key])
+                      agg[key] = { count: 0, sumNet: 0, sumSales: 0 }
                     agg[key].count++
                     agg[key].sumNet += net
+                    agg[key].sumSales += sales
                   }
+
+                  // Build + sort by avgTipPct
+                  const weatherEntries = Object.entries(agg)
+                    .map(([summary, stats]) => ({
+                      summary,
+                      ...stats,
+                      avgNet: stats.count > 0 ? stats.sumNet / stats.count : 0,
+                      avgTipPct:
+                        stats.sumSales > 0
+                          ? (stats.sumNet / stats.sumSales) * 100
+                          : null,
+                    }))
+                    .sort((a, b) => b.avgTipPct - a.avgTipPct)
+
+                  const topTipPct =
+                    weatherEntries.length > 0 &&
+                    weatherEntries[0].avgTipPct != null
+                      ? weatherEntries[0].avgTipPct
+                      : null
+
                   const emojiMap = {
                     Sunny: '☀️',
                     Clear: '☀️',
@@ -832,47 +884,65 @@ export default function Insights() {
                     Haze: '🌤️',
                   }
 
-                  const entries = Object.entries(agg).sort(
-                    (a, b) => b[1].count - a[1].count,
-                  )
-                  if (entries.length === 0)
+                  if (weatherEntries.length === 0)
                     return (
                       <div className="note">No weather data available.</div>
                     )
+
                   return (
                     <div style={{ display: 'grid', gap: 8 }}>
-                      {entries.map(([summary, stats]) => (
-                        <div
-                          key={summary}
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns: '1fr auto auto',
-                            alignItems: 'center',
-                            gap: 8,
-                          }}
-                        >
-                          <div>
-                            <span style={{ marginRight: 6 }}>
-                              {emojiMap[summary] || '🌦️'}
-                            </span>
-                            {summary}
+                      {weatherEntries.map((w) => {
+                        const isTop =
+                          topTipPct != null && w.avgTipPct === topTipPct
+                        return (
+                          <div
+                            key={w.summary}
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: '1fr auto auto auto',
+                              alignItems: 'center',
+                              gap: 8,
+                            }}
+                          >
+                            <div>
+                              <span style={{ marginRight: 6 }}>
+                                {emojiMap[w.summary] || '🌦️'}
+                              </span>
+                              {w.summary}
+                            </div>
+                            <div className="note">{w.count} shifts</div>
+                            <div className="note">
+                              {currencyFormatter.format(w.avgNet)} avg
+                            </div>
+                            <div
+                              className="tip-pill"
+                              style={{
+                                padding: '3px 10px',
+                                borderRadius: '999px',
+                                fontSize: 13,
+                                fontWeight: 600,
+                                background: isTop
+                                  ? 'rgba(34,197,94,0.12)'
+                                  : 'rgba(107,114,128,0.12)',
+                                color: isTop ? '#16a34a' : '#374151',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              Tip{' '}
+                              {w.avgTipPct != null
+                                ? `${w.avgTipPct.toFixed(1)}%`
+                                : '—'}
+                            </div>
                           </div>
-
-                          <div className="note">{stats.count} shifts</div>
-                          <div className="note">
-                            {currencyFormatter.format(
-                              stats.sumNet / stats.count,
-                            )}{' '}
-                            avg
-                          </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )
                 })()
               )}
             </div>
           )}
+
         {/* Location Breakdown — Pro only */}
         {(user?.plan_tier === 'pro' || user?.plan_tier === 'founder') &&
           settings?.multiple_locations && (
@@ -899,40 +969,232 @@ export default function Insights() {
                   for (const r of rows) {
                     const locId = r.location_id || 'unknown'
                     const locName = locMap[locId] || 'Unknown location'
+
                     const net =
                       Number(r.cash_tips || 0) +
                       Number(r.card_tips || 0) -
                       Number(r.tip_out_total || 0)
+                    const sales = Number(r.sales || 0)
+
                     if (!agg[locId])
-                      agg[locId] = { name: locName, count: 0, sumNet: 0 }
+                      agg[locId] = {
+                        name: locName,
+                        count: 0,
+                        sumNet: 0,
+                        sumSales: 0,
+                      }
+
                     agg[locId].count++
                     agg[locId].sumNet += net
+                    agg[locId].sumSales += sales
                   }
 
-                  const entries = Object.values(agg).sort(
-                    (a, b) => b.sumNet - a.sumNet,
-                  )
+                  const entries = Object.values(agg)
+                    .map((loc) => ({
+                      ...loc,
+                      avgNet: loc.sumNet / loc.count,
+                      avgTipPct:
+                        loc.sumSales > 0
+                          ? (loc.sumNet / loc.sumSales) * 100
+                          : null,
+                    }))
+                    .sort((a, b) => b.avgTipPct - a.avgTipPct)
+
+                  const topTipPct =
+                    entries.length > 0 && entries[0].avgTipPct != null
+                      ? entries[0].avgTipPct
+                      : null
 
                   return (
                     <div style={{ display: 'grid', gap: 8 }}>
-                      {entries.map((loc) => (
-                        <div
-                          key={loc.name}
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns: '1fr auto auto',
-                            alignItems: 'center',
-                            gap: 8,
-                          }}
-                        >
-                          <div>{loc.name}</div>
-                          <div className="note">{loc.count} shifts</div>
-                          <div className="note">
-                            {currencyFormatter.format(loc.sumNet / loc.count)}{' '}
-                            avg
+                      {entries.map((loc) => {
+                        const isAbove =
+                          loc.avgTipPct != null && loc.avgTipPct > overallTipPct
+                        return (
+                          <div
+                            key={loc.name}
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: '1fr auto auto auto',
+                              alignItems: 'center',
+                              gap: 8,
+                            }}
+                          >
+                            <div>{loc.name}</div>
+                            <div className="note">{loc.count} shifts</div>
+                            <div className="note">
+                              {currencyFormatter.format(loc.avgNet)} avg
+                            </div>
+                            <div
+                              className="tip-pill"
+                              style={{
+                                padding: '3px 10px',
+                                borderRadius: '999px',
+                                fontSize: 13,
+                                fontWeight: 600,
+                                background: isAbove
+                                  ? 'rgba(34,197,94,0.12)'
+                                  : 'rgba(107,114,128,0.12)',
+                                color: isAbove ? '#16a34a' : '#374151',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              Tip{' '}
+                              {loc.avgTipPct != null
+                                ? `${loc.avgTipPct.toFixed(1)}%`
+                                : '—'}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
+                    </div>
+                  )
+                })()
+              )}
+            </div>
+          )}
+
+        {/* Section Breakdown — grouped by Location */}
+        {(user?.plan_tier === 'pro' || user?.plan_tier === 'founder') &&
+          settings?.track_sections && (
+            <div className="card">
+              <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
+                Section breakdown ({tfLabel})
+              </div>
+
+              {rows.every(
+                (r) => !Array.isArray(r.sections) || r.sections.length === 0,
+              ) ? (
+                <div className="note">
+                  No section data found for this range yet.
+                </div>
+              ) : (
+                (() => {
+                  // Map location IDs to names
+                  const locMap = {}
+                  if (Array.isArray(settings?.locations)) {
+                    for (const loc of settings.locations) {
+                      locMap[loc.id] = loc.name || 'Unknown location'
+                    }
+                  }
+
+                  // Aggregate by location → section
+                  const agg = {}
+                  for (const r of rows) {
+                    const locId = r.location_id || 'unknown'
+                    const locName = locMap[locId] || 'Unknown location'
+                    const sections = Array.isArray(r.sections)
+                      ? r.sections
+                      : r.sections
+                        ? [r.sections]
+                        : ['(Unspecified)']
+
+                    const net =
+                      Number(r.cash_tips || 0) +
+                      Number(r.card_tips || 0) -
+                      Number(r.tip_out_total || 0)
+                    const sales = Number(r.sales || 0)
+
+                    for (const sec of sections) {
+                      const section = sec || '(Unspecified)'
+                      if (!agg[locId]) agg[locId] = { locName, sections: {} }
+                      if (!agg[locId].sections[section])
+                        agg[locId].sections[section] = {
+                          count: 0,
+                          sumNet: 0,
+                          sumSales: 0,
+                        }
+                      agg[locId].sections[section].count++
+                      agg[locId].sections[section].sumNet += net
+                      agg[locId].sections[section].sumSales += sales
+                    }
+                  }
+
+                  // Convert to entries grouped by location
+                  const locations = Object.values(agg)
+
+                  return (
+                    <div style={{ display: 'grid', gap: 18 }}>
+                      {locations.map((loc) => {
+                        const entries = Object.entries(loc.sections)
+                          .map(([name, s]) => ({
+                            name,
+                            count: s.count,
+                            avgNet: s.sumNet / s.count || 0,
+                            avgTipPct:
+                              s.sumSales > 0
+                                ? (s.sumNet / s.sumSales) * 100
+                                : null,
+                          }))
+                          .sort(
+                            (a, b) => (b.avgTipPct || 0) - (a.avgTipPct || 0),
+                          )
+
+                        const topTipPct =
+                          entries.length > 0 && entries[0].avgTipPct != null
+                            ? entries[0].avgTipPct
+                            : null
+
+                        return (
+                          <div
+                            key={loc.locName}
+                            style={{ display: 'grid', gap: 8 }}
+                          >
+                            <div
+                              style={{
+                                fontWeight: 700,
+                                fontSize: 15,
+                                borderBottom: '1px solid #eee',
+                                paddingBottom: 4,
+                              }}
+                            >
+                              {loc.locName}
+                            </div>
+                            <div style={{ display: 'grid', gap: 6 }}>
+                              {entries.map((s) => {
+                                const isTop =
+                                  topTipPct != null && s.avgTipPct === topTipPct
+                                return (
+                                  <div
+                                    key={s.name}
+                                    style={{
+                                      display: 'grid',
+                                      gridTemplateColumns: '1fr auto auto auto',
+                                      alignItems: 'center',
+                                      gap: 8,
+                                    }}
+                                  >
+                                    <div className="note">{s.name}</div>
+                                    <div className="note">{s.count} shifts</div>
+                                    <div className="note">
+                                      {currencyFormatter.format(s.avgNet)} avg
+                                    </div>
+                                    <div
+                                      className="tip-pill"
+                                      style={{
+                                        padding: '3px 10px',
+                                        borderRadius: '999px',
+                                        fontSize: 13,
+                                        fontWeight: 600,
+                                        background: isTop
+                                          ? 'rgba(34,197,94,0.12)'
+                                          : 'rgba(107,114,128,0.12)',
+                                        color: isTop ? '#16a34a' : '#374151',
+                                        whiteSpace: 'nowrap',
+                                      }}
+                                    >
+                                      Tip{' '}
+                                      {s.avgTipPct != null
+                                        ? `${s.avgTipPct.toFixed(1)}%`
+                                        : '—'}
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
                   )
                 })()
@@ -968,7 +1230,6 @@ export default function Insights() {
             </div>
           )}
         </div>
-
         {/* Best shift highlight */}
         <div className="card">
           <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
