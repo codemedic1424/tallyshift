@@ -55,20 +55,20 @@ export default function AddressAutocomplete({
       (place, status) => {
         if (status !== window.google.maps.places.PlacesServiceStatus.OK) return
 
-        const lat = place.geometry.location.lat()
-        const lon = place.geometry.location.lng()
+        const lat = Number(place.geometry.location.lat())
+        const lon = Number(place.geometry.location.lng())
         const formatted = place.formatted_address
 
         // Fill input
         setLocalValue(formatted)
 
-        // Push up formatted address (now & next tick to avoid batching issues)
-        onChangeAddress?.(formatted)
-        setTimeout(() => onChangeAddress?.(formatted), 0)
+        // Push formatted address up once (not twice)
+        if (onChangeAddress) onChangeAddress(formatted)
 
         // Push coords
         onSetCoords?.({ lat, lon })
         setCoords({ lat, lon })
+        console.log('Sending coords to parent:', { lat, lon })
 
         // Blur input after paint (prevents re-opening)
         requestAnimationFrame(() => inputRef.current?.blur())

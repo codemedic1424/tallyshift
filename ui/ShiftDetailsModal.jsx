@@ -17,6 +17,8 @@ export default function ShiftDetailsModal({
 }) {
   const { settings } = useSettings()
 
+  const trackDiscounts = !!settings?.track_discounts
+  const tipoutEnabled = !!settings?.default_tipout_enabled
   const payoutMode = settings?.payout_mode || 'both'
   const multipleLocations = !!settings?.multiple_locations
   const tipsOnPaycheck = payoutMode === 'on_paycheck'
@@ -44,6 +46,9 @@ export default function ShiftDetailsModal({
   const [editNotes, setEditNotes] = useState('')
   const [locationId, setLocationId] = useState(defaultLocationId)
   const [jobId, setJobId] = useState(null)
+  const [editDiscount, setEditDiscount] = useState('')
+  const [selectedSections, setSelectedSections] = useState(shift.sections || [])
+  const [showSectionsModal, setShowSectionsModal] = useState(false)
 
   useEffect(() => {
     if (!shift) return
@@ -56,6 +61,8 @@ export default function ShiftDetailsModal({
     setEditNotes(shift.notes || '')
     setLocationId(shift.location_id || defaultLocationId)
     setJobId(shift.job_type_id || null)
+    setEditDiscount(format(shift.discount_total))
+    setSelectedSections(shift.sections || [])
   }, [shift, defaultLocationId])
 
   const format = (n) => (n == null ? '' : Number(n).toFixed(2))
@@ -82,6 +89,8 @@ export default function ShiftDetailsModal({
       notes: editNotes,
       location_id: locationId || defaultLocationId,
       job_type_id: jobId || null,
+      discount_total: trackDiscounts ? Number(editDiscount || 0) : 0,
+      sections: selectedSections,
     }).finally(() => setSaving(false))
     setEditMode(false)
   }
@@ -100,6 +109,34 @@ export default function ShiftDetailsModal({
   const activeJobsForLocation = useMemo(
     () => (currentLocation?.jobs || []).filter((j) => j.active),
     [currentLocation],
+  )
+
+  const renderCurrencyInput = (value, onChange, placeholder = '0.00') => (
+    <div style={{ position: 'relative', width: '100%' }}>
+      <span
+        style={{
+          position: 'absolute',
+          left: 12,
+          top: '50%',
+          transform: 'translateY(-50%)',
+          color: '#6b7280',
+          fontSize: 14,
+        }}
+      >
+        {currencyFormatter.formatToParts(0).find((p) => p.type === 'currency')
+          ?.value || '$'}
+      </span>
+      <input
+        type="text"
+        inputMode="decimal"
+        className="input"
+        style={{ paddingLeft: 28 }}
+        placeholder={placeholder}
+        value={value}
+        onChange={onChange}
+        autoComplete="off"
+      />
+    </div>
   )
 
   return createPortal(
@@ -193,6 +230,13 @@ export default function ShiftDetailsModal({
                     </b>
                   </div>
                 )}
+                {settings?.track_sections && shift.sections?.length > 0 && (
+                  <div className="field-row">
+                    <span>Sections</span>
+                    <b>{shift.sections.join(', ')}</b>
+                  </div>
+                )}
+
                 {settings?.track_sales && (
                   <div className="field-row">
                     <span>Sales</span>
@@ -215,13 +259,43 @@ export default function ShiftDetailsModal({
                     </b>
                   </div>
                 )}
-                <div className="field-row">
-                  <span>Tip-out</span>
-                  <b>
-                    {currencyFormatter.format(Number(shift.tip_out_total || 0))}
-                  </b>
-                </div>
+                {tipoutEnabled && (
+                  <div className="field-row">
+                    <span>Tip-out</span>
+                    <b>
+                      {currencyFormatter.format(
+                        Number(shift.tip_out_total || 0),
+                      )}
+                    </b>
+                  </div>
+                )}
               </div>
+              {trackDiscounts && (
+                <div style={{ marginTop: 16 }}>
+                  <div
+                    className="note"
+                    style={{
+                      fontSize: 11,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      fontWeight: 600,
+                      color: '#6b7280',
+                      marginBottom: 8,
+                    }}
+                  >
+                    Other Details
+                  </div>
+
+                  <div className="field-row">
+                    <span>Discounts</span>
+                    <b>
+                      {currencyFormatter.format(
+                        Number(shift.discount_total || 0),
+                      )}
+                    </b>
+                  </div>
+                </div>
+              )}
 
               {shift.notes && (
                 <div className="notes">
@@ -291,6 +365,77 @@ export default function ShiftDetailsModal({
                   </select>
                 </label>
               )}
+              {/* Sections (Pro feature) */}
+              {settings?.track_sections && (
+                <div style={{ display: 'grid', gap: 12 }}>
+                  <div
+                    className="note"
+                    style={{
+                      fontSize: 11,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      fontWeight: 600,
+                      color: '#6b7280',
+                    }}
+                  >
+                    Additional Info
+                  </div>
+
+                  <div
+                    style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+                  >
+                    {selectedSections.length > 0 && (
+                      <div
+                        style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}
+                      >
+                        {selectedSections.map((sec) => (
+                          <div
+                            key={sec}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              padding: '6px 10px',
+                              borderRadius: 999,
+                              border: '1px solid var(--border)',
+                              background: '#fff',
+                              fontSize: 13,
+                            }}
+                          >
+                            <span>{sec}</span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSelectedSections((prev) =>
+                                  prev.filter((s) => s !== sec),
+                                )
+                              }
+                              style={{
+                                border: 'none',
+                                background: 'transparent',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                color: '#6b7280',
+                              }}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <button
+                      className="btn btn-primary"
+                      type="button"
+                      onClick={() => setShowSectionsModal(true)}
+                      style={{ alignSelf: 'flex-start' }}
+                    >
+                      + Add Section(s)
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {settings?.track_hours && (
                 <label className="field">
@@ -308,52 +453,61 @@ export default function ShiftDetailsModal({
               {settings?.track_sales && (
                 <label className="field">
                   <span className="field-label">Sales</span>
-                  <input
-                    className="input"
-                    type="text"
-                    inputMode="decimal"
-                    value={editSales}
-                    onChange={(e) => setEditSales(clean(e.target.value))}
-                  />
+                  {renderCurrencyInput(editSales, (e) =>
+                    setEditSales(clean(e.target.value)),
+                  )}
                 </label>
               )}
 
               {showCashInput && (
                 <label className="field">
                   <span className="field-label">Cash tips</span>
-                  <input
-                    className="input"
-                    type="text"
-                    inputMode="decimal"
-                    value={editCash}
-                    onChange={(e) => setEditCash(clean(e.target.value))}
-                  />
+                  {renderCurrencyInput(editCash, (e) =>
+                    setEditCash(clean(e.target.value)),
+                  )}
                 </label>
               )}
 
               {showCardInput && (
                 <label className="field">
                   <span className="field-label">Card tips</span>
-                  <input
-                    className="input"
-                    type="text"
-                    inputMode="decimal"
-                    value={editCard}
-                    onChange={(e) => setEditCard(clean(e.target.value))}
-                  />
+                  {renderCurrencyInput(editCard, (e) =>
+                    setEditCard(clean(e.target.value)),
+                  )}
                 </label>
               )}
 
-              <label className="field">
-                <span className="field-label">Tip-out</span>
-                <input
-                  className="input"
-                  type="text"
-                  inputMode="decimal"
-                  value={editTipOut}
-                  onChange={(e) => setEditTipOut(clean(e.target.value))}
-                />
-              </label>
+              {tipoutEnabled && (
+                <label className="field">
+                  <span className="field-label">Tip-out</span>
+                  {renderCurrencyInput(editTipOut, (e) =>
+                    setEditTipOut(clean(e.target.value)),
+                  )}
+                </label>
+              )}
+              {trackDiscounts && (
+                <div style={{ display: 'grid', gap: 12 }}>
+                  <div
+                    className="note"
+                    style={{
+                      fontSize: 11,
+                      letterSpacing: '0.08em',
+                      textTransform: 'uppercase',
+                      fontWeight: 600,
+                      color: '#6b7280',
+                    }}
+                  >
+                    Other Details
+                  </div>
+
+                  <label className="field">
+                    <span className="field-label">Discounts</span>
+                    {renderCurrencyInput(editDiscount, (e) =>
+                      setEditDiscount(clean(e.target.value)),
+                    )}
+                  </label>
+                </div>
+              )}
 
               <label className="field">
                 <span className="field-label">Notes</span>
@@ -405,6 +559,83 @@ export default function ShiftDetailsModal({
             </>
           )}
         </footer>
+        {showSectionsModal && (
+          <div
+            className="modal-backdrop"
+            onClick={() => setShowSectionsModal(false)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.45)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 20000,
+            }}
+          >
+            <div
+              className="modal-card"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: 'min(400px, 90vw)',
+                borderRadius: 16,
+                background: '#fff',
+                padding: 20,
+                boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
+                display: 'grid',
+                gap: 16,
+              }}
+            >
+              <div style={{ fontWeight: 800, fontSize: 18 }}>
+                Select Sections
+              </div>
+
+              <div style={{ display: 'grid', gap: 8 }}>
+                {(
+                  settings?.locations.find((l) => l.id === locationId)
+                    ?.sections || []
+                )
+                  .filter((s) => s.trim().length > 0)
+                  .map((sec) => (
+                    <label
+                      key={sec}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedSections.includes(sec)}
+                        onChange={(e) => {
+                          setSelectedSections((prev) =>
+                            e.target.checked
+                              ? [...prev, sec]
+                              : prev.filter((s) => s !== sec),
+                          )
+                        }}
+                      />
+                      <span>{sec}</span>
+                    </label>
+                  ))}
+              </div>
+
+              <div
+                style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}
+              >
+                <button
+                  className="btn secondary"
+                  onClick={() => setShowSectionsModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => setShowSectionsModal(false)}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {confirmingDelete && (
           <div

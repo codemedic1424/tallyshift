@@ -33,6 +33,7 @@ function normalizeLocation(raw) {
 }
 
 function initFromSettings(s) {
+  // ---- base defaults ----
   const base = {
     payout_mode: s?.payout_mode ?? 'both',
     currency: s?.currency ?? 'USD',
@@ -40,21 +41,38 @@ function initFromSettings(s) {
     default_calendar_view: s?.default_calendar_view ?? 'month',
     default_tipout_pct:
       typeof s?.default_tipout_pct === 'number' ? s.default_tipout_pct : null,
+    default_tipout_enabled:
+      typeof s?.default_tipout_enabled === 'boolean'
+        ? s.default_tipout_enabled
+        : false,
+    track_discounts:
+      typeof s?.track_discounts === 'boolean' ? s.track_discounts : false,
     track_hours: typeof s?.track_hours === 'boolean' ? s.track_hours : true,
     track_sales: typeof s?.track_sales === 'boolean' ? s.track_sales : true,
     multiple_locations:
       typeof s?.multiple_locations === 'boolean' ? s.multiple_locations : false,
     default_location_id:
       typeof s?.default_location_id === 'string' ? s.default_location_id : null,
-    // global weather toggle
     track_weather: s?.track_weather ?? false,
+    track_sections:
+      typeof s?.track_sections === 'boolean' ? s.track_sections : false,
+    sections: Array.isArray(s?.sections)
+      ? s.sections.map((name) => String(name).trim())
+      : [],
   }
 
+  // ---- normalize each location and include saved sections ----
   let locations = Array.isArray(s?.locations)
-    ? s.locations.map(normalizeLocation)
-    : null
+    ? s.locations.map((loc) => ({
+        ...normalizeLocation(loc),
+        sections: Array.isArray(loc.sections)
+          ? loc.sections.map((sec) => String(sec).trim()).filter(Boolean)
+          : [],
+      }))
+    : []
 
-  if (!locations || locations.length === 0) {
+  // ---- create a default if none exist ----
+  if (locations.length === 0) {
     const legacyJobs = Array.isArray(s?.job_types)
       ? s.job_types.map((j) => ({
           id: j?.id || uid(),
@@ -62,20 +80,22 @@ function initFromSettings(s) {
           active: j?.active ?? true,
         }))
       : []
+
     locations = [
-      normalizeLocation({
-        id: uid(),
-        name: s?.primary_location_name || 'My Location',
-        active: true,
-        track_jobs: legacyJobs.length > 0,
-        jobs: legacyJobs,
-      }),
+      {
+        ...normalizeLocation({
+          id: uid(),
+          name: s?.primary_location_name || 'My Location',
+          active: true,
+          track_jobs: legacyJobs.length > 0,
+          jobs: legacyJobs,
+        }),
+        sections: [],
+      },
     ]
-  } else {
-    locations = locations.map(normalizeLocation)
-    if (!locations[0]?.name) locations[0].name = 'My Location'
   }
 
+  // ---- set default location ID ----
   const fallbackId = locations[0]?.id || null
   const default_location_id =
     (base.default_location_id &&
@@ -318,6 +338,28 @@ export default function SettingsPanel({
   const planTier = user?.plan_tier || user?.tier || 'free'
   const [showProCard, setShowProCard] = useState(false)
   const [showWeatherWarning, setShowWeatherWarning] = useState(false)
+  const [selectedLocationId, setSelectedLocationId] = useState(() => {
+    if (!draft) return null
+    return draft.default_location_id || draft.locations?.[0]?.id || null
+  })
+  const [newSectionName, setNewSectionName] = useState('')
+
+  // Ensure a valid location is selected once settings (draft) load from Supabase
+  useEffect(() => {
+    if (
+      !draft ||
+      !Array.isArray(draft.locations) ||
+      draft.locations.length === 0
+    )
+      return
+
+    if (!selectedLocationId) {
+      const fallbackId =
+        draft.default_location_id || draft.locations[0]?.id || null
+      setSelectedLocationId(fallbackId)
+    }
+    // ✅ only depend on draft as a whole, not draft.locations directly
+  }, [draft, selectedLocationId])
 
   // Auto-disable paid features + auto-save if user downgrades
   useEffect(() => {
@@ -390,6 +432,11 @@ export default function SettingsPanel({
       (draft?.locations || []).map((l) =>
         l.id === id ? transform({ ...l }) : l,
       ),
+    )
+    console.log(
+      '✅ Updated location:',
+      id,
+      transform({ ...draft?.locations?.find((l) => l.id === id) }),
     )
   }
 
@@ -506,12 +553,17 @@ export default function SettingsPanel({
     const clean = {
       ...draft,
       default_location_id,
+      track_sections: !!draft.track_sections,
+      sections: Array.isArray(draft.sections)
+        ? draft.sections.map((s) => String(s).trim()).filter(Boolean)
+        : [],
       locations: (draft.locations || []).map((l) => ({
         ...l,
         name: String(l.name || '').trim(),
         address: String(l.address || '').trim(),
-        lat: typeof l.lat === 'number' ? l.lat : null,
-        lon: typeof l.lon === 'number' ? l.lon : null,
+        lat: l.lat != null ? Number(l.lat) : null,
+        lon: l.lon != null ? Number(l.lon) : null,
+
         jobs: (l.jobs || [])
           .map((j) => ({
             ...j,
@@ -519,6 +571,9 @@ export default function SettingsPanel({
             _isNew: undefined,
           }))
           .filter((j) => j.name.length > 0 || j.active === false),
+        sections: Array.isArray(l.sections)
+          ? l.sections.map((s) => String(s).trim()).filter(Boolean)
+          : [], // ✅ keep existing sections on save
       })),
     }
 
@@ -641,11 +696,21 @@ export default function SettingsPanel({
             updateLocation(primary.id, (l) => ({ ...l, name: v }))
           }
           onChangeAddress={(v) =>
-            updateLocation(primary.id, (l) => ({ ...l, address: v }))
+            updateLocation(primary.id, (l) => ({
+              ...l,
+              address: v,
+              lat: l.lat ?? null,
+              lon: l.lon ?? null,
+            }))
           }
-          onSetCoords={(coords) =>
-            updateLocation(primary.id, (l) => ({ ...l, ...coords }))
-          }
+          onSetCoords={(coords) => {
+            console.log('📍 Got coords from autocomplete:', coords)
+            updateLocation(primary.id, (l) => ({
+              ...l,
+              lat: Number(coords.lat),
+              lon: Number(coords.lon),
+            }))
+          }}
           onToggleTrackJobs={(v) =>
             updateLocation(primary.id, (l) => ({ ...l, track_jobs: v }))
           }
@@ -677,11 +742,21 @@ export default function SettingsPanel({
                   updateLocation(loc.id, (l) => ({ ...l, name: v }))
                 }
                 onChangeAddress={(v) =>
-                  updateLocation(loc.id, (l) => ({ ...l, address: v }))
+                  updateLocation(loc.id, (l) => ({
+                    ...l,
+                    address: v,
+                    lat: l.lat ?? null,
+                    lon: l.lon ?? null,
+                  }))
                 }
-                onSetCoords={(coords) =>
-                  updateLocation(loc.id, (l) => ({ ...l, ...coords }))
-                }
+                onSetCoords={(coords) => {
+                  console.log('📍 Got coords from autocomplete:', coords)
+                  updateLocation(primary.id, (l) => ({
+                    ...l,
+                    lat: Number(coords.lat),
+                    lon: Number(coords.lon),
+                  }))
+                }}
                 onToggleTrackJobs={(v) =>
                   updateLocation(loc.id, (l) => ({ ...l, track_jobs: v }))
                 }
@@ -807,26 +882,72 @@ export default function SettingsPanel({
             margin: '12px 0',
           }}
         />
-        <div style={{ marginBottom: 10 }}>Default Tip Out</div>
-        <label className="field">
-          <span className="field-label">Default tip-out % (optional)</span>
-          <input
-            className={`input ${highlightChanges && changed('default_tipout_pct') ? 'field-changed' : ''}`}
-            type="number"
-            min="0"
-            max="100"
-            step="0.5"
-            value={draft.default_tipout_pct ?? ''}
-            placeholder="e.g., 3"
-            onChange={(e) => {
-              const v =
-                e.target.value === ''
-                  ? null
-                  : Math.max(0, Math.min(100, Number(e.target.value)))
-              setField('default_tipout_pct', v)
+        <div style={{ marginBottom: 10, display: 'grid', gap: 8 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr auto',
+              alignItems: 'center',
+              gap: 8,
             }}
+          >
+            <div>Track Tip Out</div>
+            <Switch
+              checked={!!draft.default_tipout_enabled}
+              onChange={(v) => setField('default_tipout_enabled', v)}
+              title="Use Default Tip-Out"
+            />
+          </div>
+
+          {draft.default_tipout_enabled && (
+            <label className="field" style={{ marginTop: 6 }}>
+              <span className="field-label">Default tip-out %</span>
+              <input
+                className={`input ${
+                  highlightChanges && changed('default_tipout_pct')
+                    ? 'field-changed'
+                    : ''
+                }`}
+                type="number"
+                min="0"
+                max="100"
+                step="0.5"
+                value={draft.default_tipout_pct ?? ''}
+                placeholder="e.g., 3"
+                onChange={(e) => {
+                  const v =
+                    e.target.value === ''
+                      ? null
+                      : Math.max(0, Math.min(100, Number(e.target.value)))
+                  setField('default_tipout_pct', v)
+                }}
+              />
+            </label>
+          )}
+        </div>
+        {/* --- Divider line --- */}
+        <div
+          style={{
+            borderTop: '1px solid #ddd',
+            margin: '12px 0',
+          }}
+        />
+        {/* Track Discounts */}
+        <div
+          style={{
+            marginBottom: 10,
+            display: 'grid',
+            gridTemplateColumns: '1fr auto',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <div>Track Discounts?</div>
+          <Switch
+            checked={!!draft.track_discounts}
+            onChange={(v) => setField('track_discounts', v)}
           />
-        </label>
+        </div>
       </CollapsibleCard>
 
       {/* --- Advanced --- */}
@@ -1049,6 +1170,213 @@ export default function SettingsPanel({
                     onClick={addAdditionalLocation}
                   />
                 </div>
+              </div>
+            )}
+            {/* --- Divider line --- */}
+            <div
+              style={{
+                borderTop: '1px solid #ddd',
+                margin: '12px 0',
+              }}
+            />
+
+            {/* Track Sections (PRO Feature) */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr auto',
+                alignItems: 'center',
+                gap: 12,
+              }}
+            >
+              <div style={{ display: 'grid', gap: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ fontWeight: 700 }}>Track Sections?</div>
+                  <span
+                    style={{
+                      padding: '2px 8px',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      borderRadius: '999px',
+                      background:
+                        planTier === 'pro' || planTier === 'founder'
+                          ? '#facc15'
+                          : '#e5e7eb',
+                      color:
+                        planTier === 'pro' || planTier === 'founder'
+                          ? '#1f2937'
+                          : '#6b7280',
+                      border: '1px solid #d1d5db',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.3px',
+                    }}
+                  >
+                    Pro
+                  </span>
+                </div>
+                <div className="note">
+                  Enable to define sections (like “Bar” or “Patio”) per
+                  location.
+                </div>
+              </div>
+
+              <Switch
+                checked={!!draft.track_sections}
+                disabled={false}
+                onChange={(v) => {
+                  const entitled =
+                    planTier === 'pro' ||
+                    planTier === 'founder' ||
+                    user?.pro_override
+                  if (!entitled) {
+                    setShowUpgradeModal(true)
+                    return
+                  }
+                  setField('track_sections', v)
+                }}
+                title="Track sections"
+              />
+            </div>
+
+            {/* Section management (only if enabled) */}
+            {draft.track_sections && (
+              <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+                {/* Location selector */}
+                {draft.multiple_locations && draft.locations?.length > 1 && (
+                  <label className="field" style={{ maxWidth: 360 }}>
+                    <span className="field-label">Select Location</span>
+                    <select
+                      className="input"
+                      value={selectedLocationId || ''}
+                      onChange={(e) =>
+                        setSelectedLocationId(e.target.value || null)
+                      }
+                    >
+                      {draft.locations
+                        .filter((loc) => loc.active !== false)
+                        .map((loc) => (
+                          <option key={loc.id} value={loc.id}>
+                            {loc.name || '(Untitled)'}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                )}
+
+                {/* Add Section */}
+                <label className="field" style={{ maxWidth: 360 }}>
+                  <span className="field-label">Add Section</span>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="e.g., Patio, Bar, Private Dining"
+                      value={newSectionName}
+                      onChange={(e) => setNewSectionName(e.target.value)}
+                    />
+                    <button
+                      className="btn btn-primary"
+                      type="button"
+                      onClick={() => {
+                        const name = newSectionName.trim()
+                        if (!name || !selectedLocationId) return
+                        setDraft((d) => ({
+                          ...d,
+                          locations: d.locations.map((loc) =>
+                            loc.id === selectedLocationId
+                              ? {
+                                  ...loc,
+                                  sections: [
+                                    ...(loc.sections || []),
+                                    name,
+                                  ].filter((v, i, arr) => arr.indexOf(v) === i),
+                                }
+                              : loc,
+                          ),
+                        }))
+                        setNewSectionName('')
+                      }}
+                    >
+                      Add
+                    </button>
+                  </div>
+                </label>
+
+                {/* Section list for active location */}
+                {(() => {
+                  const activeLoc =
+                    draft?.locations?.find(
+                      (l) => l.id === selectedLocationId,
+                    ) ||
+                    draft?.locations?.[0] ||
+                    null
+
+                  if (!activeLoc) {
+                    return (
+                      <div style={{ fontSize: 13, color: '#6b7280' }}>
+                        No locations available.
+                      </div>
+                    )
+                  }
+
+                  const sectionList = Array.isArray(activeLoc.sections)
+                    ? activeLoc.sections
+                    : []
+
+                  return (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {sectionList.map((name) => (
+                        <div
+                          key={name}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '6px 10px',
+                            borderRadius: 999,
+                            border: '1px solid var(--border)',
+                            background: '#fff',
+                            fontSize: 13,
+                          }}
+                        >
+                          <span>{name}</span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDraft((d) => ({
+                                ...d,
+                                locations: d.locations.map((loc) =>
+                                  loc.id === activeLoc.id
+                                    ? {
+                                        ...loc,
+                                        sections: (loc.sections || []).filter(
+                                          (s) => s !== name,
+                                        ),
+                                      }
+                                    : loc,
+                                ),
+                              }))
+                            }
+                            style={{
+                              border: 'none',
+                              background: 'transparent',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              color: '#6b7280',
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                      {sectionList.length === 0 && (
+                        <div style={{ fontSize: 13, color: '#9ca3af' }}>
+                          No sections added yet.
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
             )}
           </div>

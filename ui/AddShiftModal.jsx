@@ -42,12 +42,11 @@ export default function AddShiftModal({
       ? showCardInput
       : payoutMode === 'both' || payoutMode === 'card_only'
   // derive tipout pct from prop OR settings
+  const tipoutEnabled = !!settings?.default_tipout_enabled
   const defaultTipoutPctEff =
-    typeof defaultTipoutPct === 'number'
-      ? defaultTipoutPct
-      : typeof settings?.default_tipout_pct === 'number'
-        ? settings.default_tipout_pct
-        : null
+    tipoutEnabled && typeof settings?.default_tipout_pct === 'number'
+      ? settings.default_tipout_pct
+      : null
 
   const [saving, setSaving] = useState(false)
 
@@ -59,7 +58,12 @@ export default function AddShiftModal({
   const [card, setCard] = useState('')
   const [tipOut, setTipOut] = useState('')
   const [notes, setNotes] = useState('')
+  const [selectedSections, setSelectedSections] = useState([])
   const [tipOutDirty, setTipOutDirty] = useState(false)
+  const [discount, setDiscount] = useState('')
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
+  const isDirty = hours || sales || cash || card || tipOut || discount || notes
+  const [showSectionsModal, setShowSectionsModal] = useState(false)
 
   // location / job selectors
   const multipleLocations = !!settings?.multiple_locations
@@ -82,6 +86,11 @@ export default function AddShiftModal({
     () => activeLocations.find((l) => l.id === locationId) || null,
     [activeLocations, locationId],
   )
+
+  const sectionsForLocation = useMemo(() => {
+    if (!settings?.track_sections) return []
+    return currentLocation?.sections || []
+  }, [settings?.track_sections, currentLocation])
 
   const locationTracksJobs = !!currentLocation?.track_jobs
   const activeJobsForLocation = useMemo(
@@ -118,6 +127,8 @@ export default function AddShiftModal({
     setTipOutDirty(false)
     setLocationId(defaultLocationId || null)
     setJobId(null)
+    setDiscount('')
+    setSelectedSections([])
     // lock background scroll
     document.body.classList.add('modal-open')
     return () => document.body.classList.remove('modal-open')
@@ -233,6 +244,11 @@ export default function AddShiftModal({
       notes,
       location_id: currentLocation?.id || null,
       job_type_id: locationTracksJobs ? jobId || null : null,
+      sections: selectedSections,
+      discount_total: settings?.track_discounts
+        ? Number(formatCurrencyValue(discount) || 0)
+        : 0,
+      sections: settings?.track_sections ? selectedSections : [],
     }
     try {
       await onSave(payload)
@@ -247,6 +263,10 @@ export default function AddShiftModal({
     <div
       className="modal-backdrop"
       onClick={() => {
+        if (isDirty) {
+          setShowDiscardConfirm(true)
+          return
+        }
         onClose?.()
         setTipOutDirty(false)
       }}
@@ -317,6 +337,10 @@ export default function AddShiftModal({
           <button
             className="cal-btn"
             onClick={() => {
+              if (isDirty) {
+                setShowDiscardConfirm(true)
+                return
+              }
               onClose?.()
               setTipOutDirty(false)
             }}
@@ -497,28 +521,126 @@ export default function AddShiftModal({
                 </div>
               )}
 
-              <label className="field">
-                <span className="field-label">Tip-out</span>
-                {renderCurrencyInput(
-                  tipOut,
-                  (e) => {
-                    setTipOutDirty(true)
-                    setTipOut(sanitizeCurrencyValue(e.target.value))
-                  },
-                  () =>
-                    setTipOut((prev) =>
-                      prev ? formatCurrencyValue(prev) : '',
-                    ),
-                )}
-                {defaultTipoutPctEff != null && !tipsOnPaycheckEff && (
-                  <div className="note" style={{ marginTop: 4 }}>
-                    Auto-filled at {defaultTipoutPctEff}% of tips. Adjust if
-                    needed.
+              {settings?.default_tipout_enabled && (
+                <label className="field">
+                  <span className="field-label">Tip-out</span>
+                  {renderCurrencyInput(
+                    tipOut,
+                    (e) => {
+                      setTipOutDirty(true)
+                      setTipOut(sanitizeCurrencyValue(e.target.value))
+                    },
+                    () =>
+                      setTipOut((prev) =>
+                        prev ? formatCurrencyValue(prev) : '',
+                      ),
+                  )}
+                  {defaultTipoutPctEff != null && !tipsOnPaycheckEff && (
+                    <div className="note" style={{ marginTop: 4 }}>
+                      Auto-filled at {defaultTipoutPctEff}% of tips. Adjust if
+                      needed.
+                    </div>
+                  )}
+                </label>
+              )}
+            </div>
+          </div>
+
+          {/* Additional Info */}
+          {settings?.track_sections && (
+            <div style={{ display: 'grid', gap: 12 }}>
+              <div
+                className="note"
+                style={{
+                  fontSize: 11,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  fontWeight: 600,
+                  color: '#6b7280',
+                }}
+              >
+                Additional Info
+              </div>
+
+              {/* Sections chooser */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {selectedSections.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {selectedSections.map((sec) => (
+                      <div
+                        key={sec}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          padding: '6px 10px',
+                          borderRadius: 999,
+                          border: '1px solid var(--border)',
+                          background: '#fff',
+                          fontSize: 13,
+                        }}
+                      >
+                        <span>{sec}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedSections((prev) =>
+                              prev.filter((s) => s !== sec),
+                            )
+                          }
+                          style={{
+                            border: 'none',
+                            background: 'transparent',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            color: '#6b7280',
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
                   </div>
+                )}
+
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  onClick={() => setShowSectionsModal(true)}
+                  style={{ alignSelf: 'flex-start' }}
+                >
+                  + Add Section(s)
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Other Details */}
+          {settings?.track_discounts && (
+            <div style={{ display: 'grid', gap: 12 }}>
+              <div
+                className="note"
+                style={{
+                  fontSize: 11,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  fontWeight: 600,
+                  color: '#6b7280',
+                }}
+              >
+                Other Details
+              </div>
+
+              <label className="field">
+                <span className="field-label">Discounts</span>
+                {renderCurrencyInput(
+                  discount,
+                  (e) => setDiscount(sanitizeCurrencyValue(e.target.value)),
+                  () => setDiscount((prev) => formatCurrencyValue(prev)),
                 )}
               </label>
             </div>
-          </div>
+          )}
 
           {/* Notes */}
           <div style={{ display: 'grid', gap: 8 }}>
@@ -556,11 +678,154 @@ export default function AddShiftModal({
           >
             {saving ? 'Saving...' : 'Save shift'}
           </button>
-          <button className="btn secondary" onClick={onClose}>
+          <button
+            className="btn secondary"
+            onClick={() => {
+              if (isDirty) {
+                setShowDiscardConfirm(true)
+                return
+              }
+              onClose?.()
+              setTipOutDirty(false)
+            }}
+          >
             Cancel
           </button>
         </div>
       </div>
+      {showDiscardConfirm && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setShowDiscardConfirm(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 20000, // ⬅️ bump this higher than 10000/10001
+          }}
+        >
+          <div
+            className="modal-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 'min(400px, 90vw)',
+              borderRadius: 16,
+              background: '#fff',
+              padding: 20,
+              boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
+              display: 'grid',
+              gap: 16,
+              zIndex: 20001, // ⬅️ also bump this
+            }}
+          >
+            <div style={{ fontWeight: 800, fontSize: 18 }}>
+              Discard this shift?
+            </div>
+            <div style={{ fontSize: 14, color: '#374151' }}>
+              You’ve entered some information. If you discard now, it will be
+              lost.
+            </div>
+            <div
+              style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}
+            >
+              <button
+                className="btn secondary"
+                onClick={() => setShowDiscardConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn danger"
+                onClick={() => {
+                  setShowDiscardConfirm(false)
+                  onClose?.()
+                  setTipOutDirty(false)
+                }}
+              >
+                Discard Shift
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showSectionsModal && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setShowSectionsModal(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 20000,
+          }}
+        >
+          <div
+            className="modal-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 'min(400px, 90vw)',
+              borderRadius: 16,
+              background: '#fff',
+              padding: 20,
+              boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
+              display: 'grid',
+              gap: 16,
+            }}
+          >
+            <div style={{ fontWeight: 800, fontSize: 18 }}>Select Sections</div>
+
+            <div style={{ display: 'grid', gap: 8 }}>
+              {(
+                settings?.locations.find((l) => l.id === locationId)
+                  ?.sections || []
+              )
+                .filter((s) => s.trim().length > 0)
+                .map((sec) => (
+                  <label
+                    key={sec}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedSections.includes(sec)}
+                      onChange={(e) => {
+                        setSelectedSections((prev) =>
+                          e.target.checked
+                            ? [...prev, sec]
+                            : prev.filter((s) => s !== sec),
+                        )
+                      }}
+                    />
+                    <span>{sec}</span>
+                  </label>
+                ))}
+            </div>
+
+            <div
+              style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}
+            >
+              <button
+                className="btn secondary"
+                onClick={() => setShowSectionsModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => setShowSectionsModal(false)}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>,
     document.body,
   )
