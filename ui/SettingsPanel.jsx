@@ -4,7 +4,7 @@ import { useUser } from '../lib/useUser'
 import { useSettings } from '../lib/useSettings'
 import UpgradeModal from './UpgradeModal'
 import AddressAutocomplete from './AddressAutocomplete'
-
+import Link from 'next/link'
 /* ---------------- utils (unchanged behavior) ---------------- */
 
 function uid() {
@@ -740,13 +740,12 @@ export default function SettingsPanel({
 
         {showProCard && (
           <div className="ts-pro-content" style={{ padding: 12 }}>
-            {/* ---- Calendar Sync (per location) ---- */}
+            {/* ---- Link Your Schedule (per location) ---- */}
             <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
-              Sync with Calendar
+              Link Your Schedule
             </div>
 
             {(() => {
-              // find selected location or fallback
               const loc =
                 draft.locations.find((l) => l.id === selectedLocationId) ||
                 draft.locations.find(
@@ -758,7 +757,7 @@ export default function SettingsPanel({
 
               return (
                 <>
-                  {/* --- Choose Location --- */}
+                  {/* --- Choose Location (if multiple) --- */}
                   {draft.multiple_locations && draft.locations?.length > 1 && (
                     <label
                       className="field"
@@ -783,7 +782,7 @@ export default function SettingsPanel({
                     </label>
                   )}
 
-                  {/* --- Toggle --- */}
+                  {/* --- Step 1: Toggle --- */}
                   <div
                     style={{
                       display: 'flex',
@@ -791,15 +790,12 @@ export default function SettingsPanel({
                       justifyContent: 'space-between',
                       gap: 8,
                       flexWrap: 'wrap',
-                      marginTop: 2,
                     }}
                   >
                     <div
                       style={{ display: 'flex', alignItems: 'center', gap: 8 }}
                     >
-                      <span>
-                        Automatically import shifts from your schedule calendar
-                      </span>
+                      <span>Turn on to import shifts automatically</span>
                       <span
                         style={{
                           padding: '2px 8px',
@@ -836,123 +832,117 @@ export default function SettingsPanel({
                         }
                         toggleCalendarSync(loc.id, v)
                       }}
-                      title="Sync with Calendar"
+                      title="Link Your Schedule"
                     />
                   </div>
 
-                  {/* --- Conditional .ics input + info --- */}
+                  {/* --- Step 2: Paste link + feedback --- */}
                   {loc.calendar_sync_enabled ? (
                     <div
                       style={{
-                        marginTop: 10,
-                        borderLeft: '2px solid #ddd',
+                        marginTop: 12,
+                        borderLeft: '2px solid #e5e7eb',
                         paddingLeft: 12,
                       }}
                     >
-                      <div className="note" style={{ marginBottom: 6 }}>
-                        Paste your <code>.ics</code> calendar link for{' '}
-                        <strong>{loc.name}</strong>.
-                      </div>
-
-                      <input
-                        type="url"
-                        className="input"
-                        placeholder="https://example.com/my-schedule.ics"
-                        value={loc.calendar_feed_url || ''}
-                        onChange={(e) => setCalendarUrl(loc.id, e.target.value)}
-                      />
-
-                      <details
-                        style={{ fontSize: 12, marginTop: 6, color: '#6b7280' }}
+                      <label
+                        className="field"
+                        style={{ display: 'block', marginBottom: 4 }}
                       >
-                        <summary>Where to find my calendar link</summary>
-                        <ul
+                        <span className="field-label">Your schedule link</span>
+                        <input
+                          type="url"
+                          className="input"
+                          placeholder="Paste your link here"
+                          value={loc.calendar_feed_url || ''}
+                          onChange={(e) =>
+                            setCalendarUrl(loc.id, e.target.value)
+                          }
+                        />
+                      </label>
+
+                      {/* Inline friendly guide */}
+                      {/* Help button */}
+                      <div style={{ marginTop: 10 }}>
+                        <Link
+                          href="/help"
                           style={{
-                            marginTop: 4,
-                            listStyle: 'disc',
-                            paddingLeft: 18,
-                            lineHeight: 1.5,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            fontWeight: 600,
+                            fontSize: 13,
+                            color: '#2563eb',
+                            textDecoration: 'none',
+                            background: '#eff6ff',
+                            border: '1px solid #bfdbfe',
+                            borderRadius: 10,
+                            padding: '6px 10px',
+                            transition:
+                              'background 0.2s ease, transform 0.1s ease',
                           }}
                         >
-                          <li>
-                            <strong>HotSchedules:</strong> “My Schedule” → “Add
-                            to Calendar” → Copy link
-                          </li>
-                          <li>
-                            <strong>Restaurant365:</strong> “My Schedule” → “Add
-                            to Calendar” → Copy iCal link
-                          </li>
-                          <li>
-                            <strong>7Shifts:</strong> Profile → “Sync Calendar”
-                            → Copy Calendar Feed URL
-                          </li>
-                        </ul>
-                        <p style={{ fontStyle: 'italic', marginTop: 4 }}>
-                          The link should start with <code>https://</code> and
-                          end with <code>.ics</code>.
+                          📘 Scheduling Link Help
+                        </Link>
+                      </div>
+
+                      {/* Light validation */}
+                      {loc.calendar_feed_url &&
+                        !loc.calendar_feed_url.endsWith('.ics') && (
+                          <p
+                            style={{
+                              color: '#b45309',
+                              fontSize: 12,
+                              marginTop: 4,
+                            }}
+                          >
+                            This link doesn’t look like a calendar feed. It
+                            should usually end with <code>.ics</code>.
+                          </p>
+                        )}
+
+                      {/* Sync feedback */}
+                      {loc.calendar_status === 'error' && (
+                        <p
+                          style={{
+                            color: '#b91c1c',
+                            fontSize: 12,
+                            marginTop: 6,
+                          }}
+                        >
+                          ⚠️ Could not sync — check that your link is correct.
                         </p>
-                      </details>
+                      )}
+                      {loc.last_calendar_sync &&
+                        loc.calendar_status !== 'error' && (
+                          <p
+                            style={{
+                              color: '#6b7280',
+                              fontSize: 12,
+                              marginTop: 6,
+                            }}
+                          >
+                            Last checked for new shifts:{' '}
+                            {new Date(loc.last_calendar_sync).toLocaleString()}
+                          </p>
+                        )}
 
                       <p
                         className="note"
-                        style={{ fontSize: 12, marginTop: 4 }}
+                        style={{ fontSize: 12, marginTop: 8 }}
                       >
-                        TallyShift only reads your schedule times — it never
-                        edits or shares your calendar.
+                        TallyShift only reads your shift times — it never
+                        changes or shares your calendar.
                       </p>
-                      {/* --- Sync Status Line --- */}
-                      {(loc.last_calendar_sync || loc.calendar_last_error) && (
-                        <div
-                          style={{
-                            marginTop: 6,
-                            fontSize: 12,
-                            color:
-                              loc.calendar_status === 'error'
-                                ? '#b91c1c'
-                                : loc.calendar_status === 'syncing'
-                                  ? '#1d4ed8'
-                                  : '#6b7280',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 6,
-                          }}
-                        >
-                          {loc.calendar_status === 'error' ? '⚠️' : '🕒'}
-                          {loc.calendar_status === 'error' ? (
-                            <>
-                              <span>
-                                Last attempt:{' '}
-                                {loc.last_calendar_sync
-                                  ? new Date(
-                                      loc.last_calendar_sync,
-                                    ).toLocaleString()
-                                  : 'never'}
-                              </span>
-                              <span style={{ fontStyle: 'italic' }}>
-                                ({loc.calendar_last_error})
-                              </span>
-                            </>
-                          ) : (
-                            <span>
-                              Last synced:{' '}
-                              {loc.last_calendar_sync
-                                ? new Date(
-                                    loc.last_calendar_sync,
-                                  ).toLocaleString()
-                                : 'never'}
-                            </span>
-                          )}
-                        </div>
-                      )}
                     </div>
                   ) : (
-                    <div className="note" style={{ marginTop: 6 }}>
-                      Enable the toggle above to link a schedule calendar for{' '}
+                    <p className="note" style={{ marginTop: 6 }}>
+                      Turn this on to connect your schedule for{' '}
                       <strong>{loc.name}</strong>.
-                    </div>
+                    </p>
                   )}
 
-                  {/* Divider below section */}
+                  {/* Divider */}
                   <div
                     style={{
                       borderTop: '1px solid #ddd',
