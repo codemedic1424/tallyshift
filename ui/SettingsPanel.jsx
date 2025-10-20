@@ -269,6 +269,39 @@ function CollapsibleCard({ title, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen)
   const contentRef = useRef(null)
 
+  // 👇 add this effect right below your useRef
+  useEffect(() => {
+    if (!contentRef.current) return
+    const el = contentRef.current
+
+    const updateHeight = () => {
+      if (open) {
+        // expand smoothly
+        el.style.maxHeight = `${el.scrollHeight}px`
+        el.style.opacity = '1'
+      } else {
+        // collapse smoothly
+        el.style.maxHeight = `${el.scrollHeight}px` // set current height first
+        el.style.opacity = '0'
+        requestAnimationFrame(() => {
+          el.style.maxHeight = '0px'
+        })
+      }
+    }
+
+    // run immediately after any change
+    requestAnimationFrame(updateHeight)
+
+    const resizeObserver = new ResizeObserver(() => {
+      if (open) {
+        el.style.maxHeight = `${el.scrollHeight}px`
+      }
+    })
+    resizeObserver.observe(el)
+
+    return () => resizeObserver.disconnect()
+  }, [open, children])
+
   return (
     <div className="collapsible-card">
       <button
@@ -286,8 +319,14 @@ function CollapsibleCard({ title, children, defaultOpen = false }) {
         className={`collapsible-content-wrapper ${open ? 'open' : ''}`}
         style={{
           maxHeight: open
-            ? `${contentRef.current?.scrollHeight || 0}px`
+            ? contentRef.current
+              ? `${contentRef.current.scrollHeight}px`
+              : 'none'
             : '0px',
+          overflow: 'hidden',
+          opacity: open ? 1 : 0,
+          transition:
+            'max-height 0.4s ease, opacity 0.3s ease, padding 0.3s ease',
         }}
       >
         <div className="collapsible-content">{children}</div>
@@ -332,19 +371,6 @@ function CollapsibleCard({ title, children, defaultOpen = false }) {
           transform: rotate(180deg);
         }
 
-        .collapsible-content-wrapper {
-          overflow: hidden;
-          max-height: 0;
-          opacity: 0;
-          transition:
-            max-height 0.35s ease,
-            opacity 0.3s ease;
-        }
-
-        .collapsible-content-wrapper.open {
-          opacity: 1;
-        }
-
         .collapsible-content {
           padding: 16px 18px;
           border-top: 1px solid var(--border);
@@ -375,6 +401,34 @@ export default function SettingsPanel({
     return draft.default_location_id || draft.locations?.[0]?.id || null
   })
   const [newSectionName, setNewSectionName] = useState('')
+  const proContentRef = useRef(null)
+
+  useEffect(() => {
+    if (!proContentRef.current) return
+    const el = proContentRef.current
+
+    const updateHeight = () => {
+      if (showProCard) {
+        el.style.maxHeight = `${el.scrollHeight}px`
+        el.style.opacity = '1'
+      } else {
+        el.style.maxHeight = `${el.scrollHeight}px`
+        el.style.opacity = '0'
+        requestAnimationFrame(() => {
+          el.style.maxHeight = '0px'
+        })
+      }
+    }
+
+    requestAnimationFrame(updateHeight)
+
+    const resizeObserver = new ResizeObserver(() => {
+      if (showProCard) el.style.maxHeight = `${el.scrollHeight}px`
+    })
+    resizeObserver.observe(el)
+
+    return () => resizeObserver.disconnect()
+  }, [showProCard])
 
   // Ensure a valid location is selected once settings (draft) load from Supabase
   useEffect(() => {
@@ -750,236 +804,40 @@ export default function SettingsPanel({
           <span className={`ts-pro-arrow${showProCard ? 'open' : ''}`}>▾</span>
         </button>
 
-        {showProCard && (
-          <div className="ts-pro-content" style={{ padding: 12 }}>
-            {/* ---- Link Your Schedule (per location) ---- */}
-            <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
-              Link Your Schedule
-            </div>
+        <div
+          ref={proContentRef}
+          className="ts-pro-content-wrapper"
+          style={{
+            overflow: 'hidden',
+            maxHeight: showProCard
+              ? `${proContentRef.current?.scrollHeight || 0}px`
+              : '0px',
+            opacity: showProCard ? 1 : 0,
+            transition: 'max-height 0.4s ease, opacity 0.3s ease',
+          }}
+        >
+          <div
+            className="ts-pro-content"
+            style={{
+              padding: 12,
+              pointerEvents: showProCard ? 'auto' : 'none',
+            }}
+          ></div>
 
-            {(() => {
-              const loc =
-                draft.locations.find((l) => l.id === selectedLocationId) ||
-                draft.locations.find(
-                  (l) => l.id === draft.default_location_id,
-                ) ||
-                draft.locations[0]
-
-              if (!loc) return null
-
-              return (
-                <>
-                  {/* --- Choose Location (if multiple) --- */}
-                  {draft.multiple_locations && draft.locations?.length > 1 && (
-                    <label
-                      className="field"
-                      style={{ maxWidth: 360, marginBottom: 10 }}
-                    >
-                      <span className="field-label">Select Location</span>
-                      <select
-                        className="input"
-                        value={selectedLocationId || loc.id || ''}
-                        onChange={(e) =>
-                          setSelectedLocationId(e.target.value || null)
-                        }
-                      >
-                        {draft.locations
-                          .filter((l) => l.active !== false)
-                          .map((l) => (
-                            <option key={l.id} value={l.id}>
-                              {l.name || '(Untitled)'}
-                            </option>
-                          ))}
-                      </select>
-                    </label>
-                  )}
-
-                  {/* --- Step 1: Toggle --- */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 8,
-                      flexWrap: 'wrap',
-                    }}
-                  >
-                    <div
-                      style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-                    >
-                      <span>Turn on to import shifts automatically</span>
-                      <span
-                        style={{
-                          padding: '2px 8px',
-                          fontSize: 11,
-                          fontWeight: 700,
-                          borderRadius: '999px',
-                          background:
-                            planTier === 'pro' || planTier === 'founder'
-                              ? '#facc15'
-                              : '#e5e7eb',
-                          color:
-                            planTier === 'pro' || planTier === 'founder'
-                              ? '#1f2937'
-                              : '#6b7280',
-                          border: '1px solid #d1d5db',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.3px',
-                        }}
-                      >
-                        Pro
-                      </span>
-                    </div>
-
-                    <Switch
-                      checked={!!loc.calendar_sync_enabled}
-                      onChange={(v) => {
-                        const entitled =
-                          planTier === 'pro' ||
-                          planTier === 'founder' ||
-                          user?.pro_override
-                        if (!entitled) {
-                          setShowUpgradeModal(true)
-                          return
-                        }
-                        toggleCalendarSync(loc.id, v)
-                      }}
-                      title="Link Your Schedule"
-                    />
-                  </div>
-
-                  {/* --- Step 2: Paste link + feedback --- */}
-                  {loc.calendar_sync_enabled ? (
-                    <div
-                      style={{
-                        marginTop: 12,
-                        borderLeft: '2px solid #e5e7eb',
-                        paddingLeft: 12,
-                      }}
-                    >
-                      <label
-                        className="field"
-                        style={{ display: 'block', marginBottom: 4 }}
-                      >
-                        <span className="field-label">Your schedule link</span>
-                        <input
-                          type="url"
-                          className="input"
-                          placeholder="Paste your link here"
-                          value={loc.calendar_feed_url || ''}
-                          onChange={(e) =>
-                            setCalendarUrl(loc.id, e.target.value)
-                          }
-                        />
-                      </label>
-
-                      {/* Inline friendly guide */}
-                      {/* Help button */}
-                      <div style={{ marginTop: 10 }}>
-                        <Link
-                          href="/help"
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            fontWeight: 600,
-                            fontSize: 13,
-                            color: '#2563eb',
-                            textDecoration: 'none',
-                            background: '#eff6ff',
-                            border: '1px solid #bfdbfe',
-                            borderRadius: 10,
-                            padding: '6px 10px',
-                            transition:
-                              'background 0.2s ease, transform 0.1s ease',
-                          }}
-                        >
-                          📘 Scheduling Link Help
-                        </Link>
-                      </div>
-
-                      {/* Light validation */}
-                      {loc.calendar_feed_url &&
-                        !loc.calendar_feed_url.endsWith('.ics') && (
-                          <p
-                            style={{
-                              color: '#b45309',
-                              fontSize: 12,
-                              marginTop: 4,
-                            }}
-                          >
-                            This link doesn’t look like a calendar feed. It
-                            should usually end with <code>.ics</code>.
-                          </p>
-                        )}
-
-                      {/* Sync feedback */}
-                      {loc.calendar_status === 'error' && (
-                        <p
-                          style={{
-                            color: '#b91c1c',
-                            fontSize: 12,
-                            marginTop: 6,
-                          }}
-                        >
-                          ⚠️ Could not sync — check that your link is correct.
-                        </p>
-                      )}
-                      {loc.last_calendar_sync &&
-                        loc.calendar_status !== 'error' && (
-                          <p
-                            style={{
-                              color: '#6b7280',
-                              fontSize: 12,
-                              marginTop: 6,
-                            }}
-                          >
-                            Last checked for new shifts:{' '}
-                            {new Date(loc.last_calendar_sync).toLocaleString()}
-                          </p>
-                        )}
-
-                      <p
-                        className="note"
-                        style={{ fontSize: 12, marginTop: 8 }}
-                      >
-                        TallyShift only reads your shift times — it never
-                        changes or shares your calendar.
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="note" style={{ marginTop: 6 }}>
-                      Turn this on to connect your schedule for{' '}
-                      <strong>{loc.name}</strong>.
-                    </p>
-                  )}
-
-                  {/* Divider */}
-                  <div
-                    style={{
-                      borderTop: '1px solid #ddd',
-                      margin: '12px 0',
-                    }}
-                  />
-                </>
-              )
-            })()}
-
-            {/* Weather (global) */}
-            <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
-              Weather
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 8,
-                flexWrap: 'wrap',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span>Track weather for each shift</span>
+          {showProCard && (
+            <div className="ts-pro-content" style={{ padding: 12 }}>
+              {/* ---- Link Your Schedule (per location) ---- */}
+              <div
+                className="h2"
+                style={{
+                  fontSize: 16,
+                  marginBottom: 8,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                <span>Link Your Schedule</span>
                 <span
                   style={{
                     padding: '2px 8px',
@@ -1003,344 +861,595 @@ export default function SettingsPanel({
                 </span>
               </div>
 
-              <Switch
-                checked={!!draft.track_weather}
-                disabled={false} // never truly disable it
-                onChange={(v) => {
-                  const entitled =
-                    ['pro', 'founder'].includes(user?.plan_tier) ||
-                    user?.pro_override
+              {(() => {
+                const loc =
+                  draft.locations.find((l) => l.id === selectedLocationId) ||
+                  draft.locations.find(
+                    (l) => l.id === draft.default_location_id,
+                  ) ||
+                  draft.locations[0]
 
-                  if (!entitled) {
-                    setShowUpgradeModal(true)
-                    return
-                  }
+                if (!loc) return null
 
-                  setField('track_weather', v)
+                return (
+                  <>
+                    {/* --- Choose Location (if multiple) --- */}
+                    {draft.multiple_locations &&
+                      draft.locations?.length > 1 && (
+                        <label
+                          className="field"
+                          style={{ maxWidth: 360, marginBottom: 10 }}
+                        >
+                          <span className="field-label">Select Location</span>
+                          <select
+                            className="input"
+                            value={selectedLocationId || loc.id || ''}
+                            onChange={(e) =>
+                              setSelectedLocationId(e.target.value || null)
+                            }
+                          >
+                            {draft.locations
+                              .filter((l) => l.active !== false)
+                              .map((l) => (
+                                <option key={l.id} value={l.id}>
+                                  {l.name || '(Untitled)'}
+                                </option>
+                              ))}
+                          </select>
+                        </label>
+                      )}
+
+                    {/* --- Step 1: Toggle --- */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                        flexWrap: 'nowrap',
+                        width: '100%',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          flexShrink: 1,
+                          minWidth: 0,
+                        }}
+                      >
+                        <span style={{ whiteSpace: 'nowrap' }}>
+                          Import shifts from work schedule
+                        </span>
+                      </div>
+
+                      <div style={{ flexShrink: 0 }}>
+                        <Switch
+                          checked={!!loc.calendar_sync_enabled}
+                          onChange={(v) => {
+                            const entitled =
+                              planTier === 'pro' ||
+                              planTier === 'founder' ||
+                              user?.pro_override
+                            if (!entitled) {
+                              setShowUpgradeModal(true)
+                              return
+                            }
+                            toggleCalendarSync(loc.id, v)
+                          }}
+                          title="Link Your Schedule"
+                        />
+                      </div>
+                    </div>
+
+                    {/* --- Step 2: Paste link + feedback --- */}
+                    {loc.calendar_sync_enabled ? (
+                      <div
+                        style={{
+                          marginTop: 12,
+                          borderLeft: '2px solid #e5e7eb',
+                          paddingLeft: 12,
+                        }}
+                      >
+                        <label
+                          className="field"
+                          style={{ display: 'block', marginBottom: 4 }}
+                        >
+                          <span className="field-label">
+                            Your schedule link
+                          </span>
+                          <input
+                            type="url"
+                            className="input"
+                            placeholder="Paste your link here"
+                            value={loc.calendar_feed_url || ''}
+                            onChange={(e) =>
+                              setCalendarUrl(loc.id, e.target.value)
+                            }
+                          />
+                        </label>
+
+                        {/* Inline friendly guide */}
+                        {/* Help button */}
+                        <div style={{ marginTop: 10 }}>
+                          <Link
+                            href="/help"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              fontWeight: 600,
+                              fontSize: 13,
+                              color: '#2563eb',
+                              textDecoration: 'none',
+                              background: '#eff6ff',
+                              border: '1px solid #bfdbfe',
+                              borderRadius: 10,
+                              padding: '6px 10px',
+                              transition:
+                                'background 0.2s ease, transform 0.1s ease',
+                            }}
+                          >
+                            📘 Scheduling Link Help
+                          </Link>
+                        </div>
+
+                        {/* Light validation */}
+                        {loc.calendar_feed_url &&
+                          !loc.calendar_feed_url.endsWith('.ics') && (
+                            <p
+                              style={{
+                                color: '#b45309',
+                                fontSize: 12,
+                                marginTop: 4,
+                              }}
+                            >
+                              This link doesn’t look like a calendar feed. It
+                              should usually end with <code>.ics</code>.
+                            </p>
+                          )}
+
+                        {/* Sync feedback */}
+                        {loc.calendar_status === 'error' && (
+                          <p
+                            style={{
+                              color: '#b91c1c',
+                              fontSize: 12,
+                              marginTop: 6,
+                            }}
+                          >
+                            ⚠️ Could not sync — check that your link is correct.
+                          </p>
+                        )}
+                        {loc.last_calendar_sync &&
+                          loc.calendar_status !== 'error' && (
+                            <p
+                              style={{
+                                color: '#6b7280',
+                                fontSize: 12,
+                                marginTop: 6,
+                              }}
+                            >
+                              Last checked for new shifts:{' '}
+                              {new Date(
+                                loc.last_calendar_sync,
+                              ).toLocaleString()}
+                            </p>
+                          )}
+
+                        <p
+                          className="note"
+                          style={{ fontSize: 12, marginTop: 8 }}
+                        >
+                          TallyShift only reads your shift times — it never
+                          changes or shares your calendar.
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="note" style={{ marginTop: 6 }}>
+                        Turn this on to connect your schedule for{' '}
+                        <strong>{loc.name}</strong>.
+                      </p>
+                    )}
+
+                    {/* Divider */}
+                    <div
+                      style={{
+                        borderTop: '1px solid #ddd',
+                        margin: '12px 0',
+                      }}
+                    />
+                  </>
+                )
+              })()}
+
+              {/* Weather (global) */}
+              <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
+                Weather
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                  flexWrap: 'wrap',
                 }}
-                title="Track weather"
-              />
-            </div>
-            <div className="note" style={{ marginTop: 6 }}>
-              Requires an address per active location (we’ll look up coordinates
-              automatically).
-            </div>
-            {/* --- Divider line --- */}
-            <div
-              style={{
-                borderTop: '1px solid #ddd',
-                margin: '12px 0',
-              }}
-            />
-            {/* Multi-locations toggle + default selector */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr auto',
-                alignItems: 'center',
-                gap: 12,
-              }}
-            >
-              <div style={{ display: 'grid', gap: 4 }}>
+              >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ fontWeight: 700 }}>
-                    Track multiple locations?
+                  <span>Track weather for each shift</span>
+                  <span
+                    style={{
+                      padding: '2px 8px',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      borderRadius: '999px',
+                      background:
+                        planTier === 'pro' || planTier === 'founder'
+                          ? '#facc15'
+                          : '#e5e7eb',
+                      color:
+                        planTier === 'pro' || planTier === 'founder'
+                          ? '#1f2937'
+                          : '#6b7280',
+                      border: '1px solid #d1d5db',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.3px',
+                    }}
+                  >
+                    Pro
+                  </span>
+                </div>
+
+                <Switch
+                  checked={!!draft.track_weather}
+                  disabled={false} // never truly disable it
+                  onChange={(v) => {
+                    const entitled =
+                      ['pro', 'founder'].includes(user?.plan_tier) ||
+                      user?.pro_override
+
+                    if (!entitled) {
+                      setShowUpgradeModal(true)
+                      return
+                    }
+
+                    setField('track_weather', v)
+                  }}
+                  title="Track weather"
+                />
+              </div>
+              <div className="note" style={{ marginTop: 6 }}>
+                Requires an address per active location (we’ll look up
+                coordinates automatically).
+              </div>
+              {/* --- Divider line --- */}
+              <div
+                style={{
+                  borderTop: '1px solid #ddd',
+                  margin: '12px 0',
+                }}
+              />
+              {/* Multi-locations toggle + default selector */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr auto',
+                  alignItems: 'center',
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: 'grid', gap: 4 }}>
+                  <div
+                    style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                  >
+                    <div style={{ fontWeight: 700 }}>
+                      Track multiple locations?
+                    </div>
+                    {/* PRO pill */}
+                    <span
+                      style={{
+                        padding: '2px 8px',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        borderRadius: '999px',
+                        background:
+                          planTier === 'pro' || planTier === 'founder'
+                            ? '#facc15'
+                            : '#e5e7eb',
+                        color:
+                          planTier === 'pro' || planTier === 'founder'
+                            ? '#1f2937'
+                            : '#6b7280',
+                        border: '1px solid #d1d5db',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.3px',
+                      }}
+                    >
+                      Pro
+                    </span>
                   </div>
-                  {/* PRO pill */}
-                  <span
-                    style={{
-                      padding: '2px 8px',
-                      fontSize: 11,
-                      fontWeight: 700,
-                      borderRadius: '999px',
-                      background:
-                        planTier === 'pro' || planTier === 'founder'
-                          ? '#facc15'
-                          : '#e5e7eb',
-                      color:
-                        planTier === 'pro' || planTier === 'founder'
-                          ? '#1f2937'
-                          : '#6b7280',
-                      border: '1px solid #d1d5db',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.3px',
-                    }}
-                  >
-                    Pro
-                  </span>
+                  <div className="note">
+                    Enable to add more locations and pick a default.
+                  </div>
                 </div>
-                <div className="note">
-                  Enable to add more locations and pick a default.
-                </div>
-              </div>
 
-              <Switch
-                checked={!!draft.multiple_locations}
-                disabled={false} // keep interactive so they can click it
-                onChange={(v) => {
-                  const entitled =
-                    planTier === 'pro' ||
-                    planTier === 'founder' ||
-                    user?.pro_override
-                  if (!entitled) {
-                    setShowUpgradeModal(true)
-                    return
-                  }
-                  setField('multiple_locations', v)
-                }}
-                title="Multiple locations"
-              />
-            </div>
-            {draft.multiple_locations && (
-              <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
-                <label className="field" style={{ maxWidth: 360 }}>
-                  <span className="field-label">Default location</span>
-                  <select
-                    id="default-location-dropdown"
-                    className={`input ${
-                      highlightChanges && changed('default_location_id')
-                        ? 'field-changed'
-                        : ''
-                    }`}
-                    value={
-                      (draft.default_location_id ??
-                        (primary ? primary.id : '')) ||
-                      ''
+                <Switch
+                  checked={!!draft.multiple_locations}
+                  disabled={false} // keep interactive so they can click it
+                  onChange={(v) => {
+                    const entitled =
+                      planTier === 'pro' ||
+                      planTier === 'founder' ||
+                      user?.pro_override
+                    if (!entitled) {
+                      setShowUpgradeModal(true)
+                      return
                     }
-                    onChange={(e) =>
-                      setField(
-                        'default_location_id',
-                        e.target.value || (primary ? primary.id : ''),
-                      )
-                    }
-                  >
-                    {(draft.locations || [])
-                      .filter((l) => l.active)
-                      .map((l) => (
-                        <option key={l.id} value={l.id}>
-                          {l.name || '(untitled)'}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <TinyIconBtn
-                    label="+ Add location"
-                    variant="primary"
-                    onClick={addAdditionalLocation}
-                  />
-                </div>
+                    setField('multiple_locations', v)
+                  }}
+                  title="Multiple locations"
+                />
               </div>
-            )}
-            {/* --- Divider line --- */}
-            <div
-              style={{
-                borderTop: '1px solid #ddd',
-                margin: '12px 0',
-              }}
-            />
-            {/* Track Sections (PRO Feature) */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr auto',
-                alignItems: 'center',
-                gap: 12,
-              }}
-            >
-              <div style={{ display: 'grid', gap: 4 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ fontWeight: 700 }}>Track Sections?</div>
-                  <span
-                    style={{
-                      padding: '2px 8px',
-                      fontSize: 11,
-                      fontWeight: 700,
-                      borderRadius: '999px',
-                      background:
-                        planTier === 'pro' || planTier === 'founder'
-                          ? '#facc15'
-                          : '#e5e7eb',
-                      color:
-                        planTier === 'pro' || planTier === 'founder'
-                          ? '#1f2937'
-                          : '#6b7280',
-                      border: '1px solid #d1d5db',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.3px',
-                    }}
-                  >
-                    Pro
-                  </span>
-                </div>
-                <div className="note">
-                  Enable to define sections (like “Bar” or “Patio”) per
-                  location.
-                </div>
-              </div>
-
-              <Switch
-                checked={!!draft.track_sections}
-                disabled={false}
-                onChange={(v) => {
-                  const entitled =
-                    planTier === 'pro' ||
-                    planTier === 'founder' ||
-                    user?.pro_override
-                  if (!entitled) {
-                    setShowUpgradeModal(true)
-                    return
-                  }
-                  setField('track_sections', v)
-                }}
-                title="Track sections"
-              />
-            </div>
-            {/* Section management (only if enabled) */}
-            {draft.track_sections && (
-              <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
-                {/* Location selector */}
-                {draft.multiple_locations && draft.locations?.length > 1 && (
+              {draft.multiple_locations && (
+                <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
                   <label className="field" style={{ maxWidth: 360 }}>
-                    <span className="field-label">Select Location</span>
+                    <span className="field-label">Default location</span>
                     <select
-                      className="input"
-                      value={selectedLocationId || ''}
+                      id="default-location-dropdown"
+                      className={`input ${
+                        highlightChanges && changed('default_location_id')
+                          ? 'field-changed'
+                          : ''
+                      }`}
+                      value={
+                        (draft.default_location_id ??
+                          (primary ? primary.id : '')) ||
+                        ''
+                      }
                       onChange={(e) =>
-                        setSelectedLocationId(e.target.value || null)
+                        setField(
+                          'default_location_id',
+                          e.target.value || (primary ? primary.id : ''),
+                        )
                       }
                     >
-                      {draft.locations
-                        .filter((loc) => loc.active !== false)
-                        .map((loc) => (
-                          <option key={loc.id} value={loc.id}>
-                            {loc.name || '(Untitled)'}
+                      {(draft.locations || [])
+                        .filter((l) => l.active)
+                        .map((l) => (
+                          <option key={l.id} value={l.id}>
+                            {l.name || '(untitled)'}
                           </option>
                         ))}
                     </select>
                   </label>
-                )}
 
-                {/* Add Section */}
-                <label className="field" style={{ maxWidth: 360 }}>
-                  <span className="field-label">Add Section</span>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <input
-                      type="text"
-                      className="input"
-                      placeholder="e.g., Patio, Bar, Private Dining"
-                      value={newSectionName}
-                      onChange={(e) => setNewSectionName(e.target.value)}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <TinyIconBtn
+                      label="+ Add location"
+                      variant="primary"
+                      onClick={addAdditionalLocation}
                     />
-                    <button
-                      className="btn btn-primary"
-                      type="button"
-                      onClick={() => {
-                        const name = newSectionName.trim()
-                        if (!name || !selectedLocationId) return
-                        setDraft((d) => ({
-                          ...d,
-                          locations: d.locations.map((loc) =>
-                            loc.id === selectedLocationId
-                              ? {
-                                  ...loc,
-                                  sections: [
-                                    ...(loc.sections || []),
-                                    name,
-                                  ].filter((v, i, arr) => arr.indexOf(v) === i),
-                                }
-                              : loc,
-                          ),
-                        }))
-                        setNewSectionName('')
+                  </div>
+                </div>
+              )}
+              {/* --- Divider line --- */}
+              <div
+                style={{
+                  borderTop: '1px solid #ddd',
+                  margin: '12px 0',
+                }}
+              />
+              {/* Track Sections (PRO Feature) */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr auto',
+                  alignItems: 'center',
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: 'grid', gap: 4 }}>
+                  <div
+                    style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                  >
+                    <div style={{ fontWeight: 700 }}>Track Sections?</div>
+                    <span
+                      style={{
+                        padding: '2px 8px',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        borderRadius: '999px',
+                        background:
+                          planTier === 'pro' || planTier === 'founder'
+                            ? '#facc15'
+                            : '#e5e7eb',
+                        color:
+                          planTier === 'pro' || planTier === 'founder'
+                            ? '#1f2937'
+                            : '#6b7280',
+                        border: '1px solid #d1d5db',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.3px',
                       }}
                     >
-                      Add
-                    </button>
+                      Pro
+                    </span>
                   </div>
-                </label>
+                  <div className="note">
+                    Enable to define sections (like “Bar” or “Patio”) per
+                    location.
+                  </div>
+                </div>
 
-                {/* Section list for active location */}
-                {(() => {
-                  const activeLoc =
-                    draft?.locations?.find(
-                      (l) => l.id === selectedLocationId,
-                    ) ||
-                    draft?.locations?.[0] ||
-                    null
+                <Switch
+                  checked={!!draft.track_sections}
+                  disabled={false}
+                  onChange={(v) => {
+                    const entitled =
+                      planTier === 'pro' ||
+                      planTier === 'founder' ||
+                      user?.pro_override
+                    if (!entitled) {
+                      setShowUpgradeModal(true)
+                      return
+                    }
+                    setField('track_sections', v)
+                  }}
+                  title="Track sections"
+                />
+              </div>
+              {/* Section management (only if enabled) */}
+              {draft.track_sections && (
+                <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+                  {/* Location selector */}
+                  {draft.multiple_locations && draft.locations?.length > 1 && (
+                    <label className="field" style={{ maxWidth: 360 }}>
+                      <span className="field-label">Select Location</span>
+                      <select
+                        className="input"
+                        value={selectedLocationId || ''}
+                        onChange={(e) =>
+                          setSelectedLocationId(e.target.value || null)
+                        }
+                      >
+                        {draft.locations
+                          .filter((loc) => loc.active !== false)
+                          .map((loc) => (
+                            <option key={loc.id} value={loc.id}>
+                              {loc.name || '(Untitled)'}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                  )}
 
-                  if (!activeLoc) {
+                  {/* Add Section */}
+                  <label className="field" style={{ maxWidth: 360 }}>
+                    <span className="field-label">Add Section</span>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        type="text"
+                        className="input"
+                        placeholder="e.g., Patio, Bar, Private Dining"
+                        value={newSectionName}
+                        onChange={(e) => setNewSectionName(e.target.value)}
+                      />
+                      <button
+                        className="btn btn-primary"
+                        type="button"
+                        onClick={() => {
+                          const name = newSectionName.trim()
+                          if (!name || !selectedLocationId) return
+                          setDraft((d) => ({
+                            ...d,
+                            locations: d.locations.map((loc) =>
+                              loc.id === selectedLocationId
+                                ? {
+                                    ...loc,
+                                    sections: [
+                                      ...(loc.sections || []),
+                                      name,
+                                    ].filter(
+                                      (v, i, arr) => arr.indexOf(v) === i,
+                                    ),
+                                  }
+                                : loc,
+                            ),
+                          }))
+                          setNewSectionName('')
+                        }}
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </label>
+
+                  {/* Section list for active location */}
+                  {(() => {
+                    const activeLoc =
+                      draft?.locations?.find(
+                        (l) => l.id === selectedLocationId,
+                      ) ||
+                      draft?.locations?.[0] ||
+                      null
+
+                    if (!activeLoc) {
+                      return (
+                        <div style={{ fontSize: 13, color: '#6b7280' }}>
+                          No locations available.
+                        </div>
+                      )
+                    }
+
+                    const sectionList = Array.isArray(activeLoc.sections)
+                      ? activeLoc.sections
+                      : []
+
                     return (
-                      <div style={{ fontSize: 13, color: '#6b7280' }}>
-                        No locations available.
-                      </div>
-                    )
-                  }
-
-                  const sectionList = Array.isArray(activeLoc.sections)
-                    ? activeLoc.sections
-                    : []
-
-                  return (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {sectionList.map((name) => (
-                        <div
-                          key={name}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            padding: '6px 10px',
-                            borderRadius: 999,
-                            border: '1px solid var(--border)',
-                            background: '#fff',
-                            fontSize: 13,
-                          }}
-                        >
-                          <span>{name}</span>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setDraft((d) => ({
-                                ...d,
-                                locations: d.locations.map((loc) =>
-                                  loc.id === activeLoc.id
-                                    ? {
-                                        ...loc,
-                                        sections: (loc.sections || []).filter(
-                                          (s) => s !== name,
-                                        ),
-                                      }
-                                    : loc,
-                                ),
-                              }))
-                            }
+                      <div
+                        style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}
+                      >
+                        {sectionList.map((name) => (
+                          <div
+                            key={name}
                             style={{
-                              border: 'none',
-                              background: 'transparent',
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              color: '#6b7280',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              padding: '6px 10px',
+                              borderRadius: 999,
+                              border: '1px solid var(--border)',
+                              background: '#fff',
+                              fontSize: 13,
                             }}
                           >
-                            ×
-                          </button>
-                        </div>
-                      ))}
-                      {sectionList.length === 0 && (
-                        <div style={{ fontSize: 13, color: '#9ca3af' }}>
-                          No sections added yet.
-                        </div>
-                      )}
-                    </div>
-                  )
-                })()}
-              </div>
-            )}
-          </div>
-        )}
+                            <span>{name}</span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDraft((d) => ({
+                                  ...d,
+                                  locations: d.locations.map((loc) =>
+                                    loc.id === activeLoc.id
+                                      ? {
+                                          ...loc,
+                                          sections: (loc.sections || []).filter(
+                                            (s) => s !== name,
+                                          ),
+                                        }
+                                      : loc,
+                                  ),
+                                }))
+                              }
+                              style={{
+                                border: 'none',
+                                background: 'transparent',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                color: '#6b7280',
+                              }}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                        {sectionList.length === 0 && (
+                          <div style={{ fontSize: 13, color: '#9ca3af' }}>
+                            No sections added yet.
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
+
       {/* --- First Impression: Locations --- */}
       <CollapsibleCard title="Locations & Jobs">
         <div

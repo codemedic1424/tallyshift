@@ -328,39 +328,59 @@ export default function Profile() {
     <div className="page">
       <HeaderBar title="Profile" />
       <div className="container" style={{ paddingBottom: 96 }}>
+        {/* Profile Header */}
         <div
-          className="card"
+          className="card profile-header"
           style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 16,
+            textAlign: 'center',
+            padding: '28px 20px 32px',
+            background:
+              'linear-gradient(135deg, rgba(37,99,235,0.08), rgba(34,197,94,0.08))',
+            border: '1px solid rgba(0,0,0,0.05)',
           }}
         >
-          <div>
-            <div className="h1">Profile</div>
-            <div className="note">
-              Manage your account, security, and photo.
-            </div>
-          </div>
+          <h1
+            style={{
+              fontSize: 22,
+              fontWeight: 700,
+              color: '#111827',
+              marginBottom: 6,
+            }}
+          >
+            👋 Welcome back{first ? `, ${first}` : ''}!
+          </h1>
+
+          <p
+            style={{
+              color: '#4b5563',
+              fontSize: 15,
+              marginBottom: 20,
+              lineHeight: 1.4,
+            }}
+          >
+            Manage your account, preferences, and settings.
+          </p>
+
           <button
             type="button"
-            className="btn secondary"
+            className="btn btn-primary"
             style={{
+              width: '100%',
+              maxWidth: 260,
+              margin: '0 auto',
+              padding: '10px 16px',
+              borderRadius: 12,
+              fontSize: 15,
               display: 'inline-flex',
               alignItems: 'center',
+              justifyContent: 'center',
               gap: 8,
-              padding: '8px 12px',
-              borderRadius: 12,
-              fontSize: 13,
-              alignSelf: 'flex-start',
             }}
             onClick={() => setSettingsOpen(true)}
             aria-label="Open settings"
           >
-            <Settings size={18} strokeWidth={1.6} />
-            <span>Settings</span>
+            <Settings size={18} strokeWidth={1.8} />
+            <span>Open Settings</span>
           </button>
         </div>
 
@@ -928,6 +948,25 @@ export default function Profile() {
     </div>
   )
 }
+
+;<style jsx global>{`
+  .profile-header {
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06);
+    border-radius: 20px;
+  }
+
+  .btn.btn-primary {
+    background: linear-gradient(90deg, #2563eb, #22c55e);
+    color: #fff;
+    font-weight: 600;
+  }
+
+  .btn.btn-primary:hover {
+    opacity: 0.92;
+    transform: translateY(-1px);
+    transition: all 0.25s ease;
+  }
+`}</style>
 
 /* inline icons */
 function EyeIcon() {

@@ -9,7 +9,8 @@ import { supabase } from '../lib/supabase'
 import HeaderBar from '../ui/HeaderBar'
 import TabBar from '../ui/TabBar'
 import FAB from '../ui/FAB'
-import ShiftDetailsModal from '../ui/ShiftDetailsModal'
+import ProfileCompletionModal from '../ui/ProfileCompletionModal'
+import WalkthroughModal from '../ui/WalkthroughModal'
 
 function parseDateOnlyLocal(s) {
   if (!s) return new Date(NaN)
@@ -53,6 +54,8 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [selectedShift, setSelectedShift] = useState(null)
   const [avatarUrl, setAvatarUrl] = useState(null)
+  const [showNameModal, setShowNameModal] = useState(false)
+  const [showWalkthrough, setShowWalkthrough] = useState(false)
 
   const currencyCode = settings?.currency || 'USD'
   const currencyFormatter = useMemo(
@@ -67,18 +70,49 @@ export default function Home() {
   )
 
   // Load profile info
+  // Load or create profile and trigger onboarding
   useEffect(() => {
     if (!user) return
     ;(async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('first_name,last_name,avatar_path')
+        .select(
+          'first_name,last_name,avatar_path,first_time_complete,walkthrough_seen',
+        )
         .eq('id', user.id)
-        .single()
-      if (error) console.error('Profile load error:', error)
+        .maybeSingle() // returns null if no row
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Profile load error:', error)
+        return
+      }
+
+      // 🚀 No profile yet — create a blank one and trigger name modal
+      if (!data) {
+        const { error: insertErr } = await supabase.from('profiles').insert({
+          id: user.id,
+          first_name: null,
+          last_name: null,
+          first_time_complete: false,
+          walkthrough_seen: false,
+        })
+        if (insertErr) console.error('Profile insert error:', insertErr)
+        setShowNameModal(true)
+        return
+      }
+
+      // 🧭 Existing profile
       setProfile(data)
 
-      if (data?.avatar_path) {
+      // ✅ Trigger onboarding modals based on flags
+      if (!data.first_time_complete) {
+        setShowNameModal(true)
+      } else if (!data.walkthrough_seen) {
+        setShowWalkthrough(true)
+      }
+
+      // Load avatar if present
+      if (data.avatar_path) {
         const { data: publicUrlData } = supabase.storage
           .from('avatars')
           .getPublicUrl(data.avatar_path)
@@ -368,6 +402,22 @@ export default function Home() {
           box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
         }
       `}</style>
+      {showNameModal && (
+        <ProfileCompletionModal
+          userId={user.id}
+          onComplete={() => {
+            setShowNameModal(false)
+            setShowWalkthrough(true)
+          }}
+        />
+      )}
+
+      {showWalkthrough && (
+        <WalkthroughModal
+          userId={user.id}
+          onFinish={() => setShowWalkthrough(false)}
+        />
+      )}
     </div>
   )
 }
