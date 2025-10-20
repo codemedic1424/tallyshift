@@ -52,6 +52,7 @@ export default function DaySheetModal({
           ) : (
             <div className="shift-list">
               {shifts.map((shift) => {
+                const isImported = shift.imported
                 const cash = Number(shift?.cash_tips ?? 0)
                 const card = Number(shift?.card_tips ?? 0)
                 const tipout = Number(shift?.tip_out_total ?? 0)
@@ -66,22 +67,48 @@ export default function DaySheetModal({
                 return (
                   <div
                     key={shift.id}
-                    className="shift-chip"
-                    onClick={() => onOpenShift?.(shift)}
+                    className={`shift-chip ${shift.imported ? 'draft' : ''}`}
+                    onClick={() => {
+                      if (shift.imported) {
+                        onAdd?.(parseDateOnlyLocal(shift.date), shift)
+                      } else {
+                        onOpenShift?.(shift)
+                      }
+                    }}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') onOpenShift?.(shift)
+                      if (e.key === 'Enter') {
+                        if (shift.imported) {
+                          onAdd?.(parseDateOnlyLocal(shift.date), shift)
+                        } else {
+                          onOpenShift?.(shift)
+                        }
+                      }
                     }}
                   >
-                    <div className="chip-header">
-                      <span className="net">{fmt(net)}</span>
-                      <span className="divider">{S.middot}</span>
-                      <span className="hours">{hours.toFixed(2)}h</span>
-                      <span className="eff">({fmt(eff)} /h)</span>
-                    </div>
-                    {shift?.notes && (
-                      <div className="chip-notes">{shift.notes}</div>
+                    {isImported ? (
+                      <>
+                        <div className="chip-header">
+                          <b>{shift.location_name || 'Scheduled Shift'}</b>
+                        </div>
+                        <div className="chip-notes">
+                          {shift.summary || 'Shift'}
+                          {shift.time_range ? ` ${shift.time_range}` : ''}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="chip-header">
+                          <span className="net">{fmt(net)}</span>
+                          <span className="divider">{S.middot}</span>
+                          <span className="hours">{hours.toFixed(2)}h</span>
+                          <span className="eff">({fmt(eff)} /h)</span>
+                        </div>
+                        {shift?.notes && (
+                          <div className="chip-notes">{shift.notes}</div>
+                        )}
+                      </>
                     )}
                   </div>
                 )
@@ -98,6 +125,17 @@ export default function DaySheetModal({
 
         <style jsx>{`
           /* Center the modal and give breathing room from the top/bottom */
+          .shift-chip.draft {
+            opacity: 0.65;
+            font-style: italic;
+            border: 1px dashed var(--border, #e5e7eb);
+            background: #f9fafb;
+          }
+
+          .shift-chip.draft:hover {
+            background: #f1f5f9;
+          }
+
           .modal-backdrop.day-sheet {
             position: fixed;
             inset: 0;

@@ -10,6 +10,7 @@ import TabBar from '../ui/TabBar'
 import ShiftDetailsModal from '../ui/ShiftDetailsModal'
 import AddShiftModal from '../ui/AddShiftModal'
 import DaySheetModal from '../ui/DaySheetModal'
+import { showToast } from '../ui/showToast'
 
 // ---------- helpers ----------
 const S = { ndash: '\u2013', times: '\u00D7', middot: '\u00B7' }
@@ -111,6 +112,44 @@ export default function CalendarPage({ theme, setTheme }) {
   const { user, loading } = useUser()
   const { settings } = useSettings()
   const router = useRouter()
+  // ✅ Check if any location has calendar sync enabled
+  const anyCalendarSyncEnabled = Array.isArray(settings?.locations)
+    ? settings.locations.some(
+        (loc) =>
+          (loc?.calendar_sync_enabled === true ||
+            loc?.calendarSyncEnabled === true) &&
+          (loc?.calendar_feed_url || loc?.calendarFeedUrl),
+      )
+    : false
+
+  async function handleManualCalendarSync() {
+    console.log('User in sync handler:', user)
+    if (!user) return alert('Please sign in first.')
+    if (!Array.isArray(settings?.locations)) return alert('No locations found.')
+
+    try {
+      console.log('🔄 Manual calendar sync triggered...')
+      const res = await fetch('/api/sync-calendar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user.id, // ✅ lowercase "i"
+          locations: settings.locations,
+        }),
+      })
+
+      const data = await res.json()
+      if (!data.ok) throw new Error(data.error || 'Sync failed.')
+
+      showToast(`Calendar synced!`)
+
+      // 🪄 Force a refresh of the useEffect by reloading settings
+      setSyncTrigger((x) => x + 1)
+    } catch (err) {
+      console.error('Manual sync error:', err)
+      showToast(`Sync failed: ${err.message}`, 3000, 'error')
+    }
+  }
 
   const [view, setView] = useState('month') // 'day' | 'week' | 'month'
   const [viewInitialized, setViewInitialized] = useState(false)
@@ -121,10 +160,50 @@ export default function CalendarPage({ theme, setTheme }) {
   // Add-shift modal (external component)
   const [addOpen, setAddOpen] = useState(false)
   const [addDate, setAddDate] = useState(dateKeyLocal(new Date()))
+  const [prefillShift, setPrefillShift] = useState(null)
 
   // mobile day sheet
   const [daySheetOpen, setDaySheetOpen] = useState(false)
   const [daySheetDate, setDaySheetDate] = useState(dateKeyLocal(new Date()))
+  const [syncTrigger, setSyncTrigger] = useState(0)
+
+  useEffect(() => {
+    if (!user || !settings) return
+
+    // check if we already synced today
+    const lastSync = localStorage.getItem('lastCalendarSync')
+    const today = new Date().toISOString().slice(0, 10)
+
+    if (lastSync === today) return // ✅ already synced today, skip
+
+    const autoSync = async () => {
+      try {
+        console.log('🕓 Auto calendar sync started...')
+        const res = await fetch('/api/sync-calendar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: user.id,
+            locations: settings.locations || [],
+          }),
+        })
+
+        const data = await res.json()
+        if (data.ok) {
+          console.log('✅ Auto calendar sync complete')
+          localStorage.setItem('lastCalendarSync', today)
+          // Refresh local data
+          setSyncTrigger((x) => x + 1)
+        } else {
+          console.warn('⚠️ Auto sync skipped:', data.reason || data.error)
+        }
+      } catch (err) {
+        console.error('Auto calendar sync failed:', err)
+      }
+    }
+
+    autoSync()
+  }, [user?.id, JSON.stringify(settings)])
 
   // settings-driven flags
   const weekStartSetting =
@@ -208,20 +287,160 @@ export default function CalendarPage({ theme, setTheme }) {
   }, [view, cursor, weekStartSetting])
 
   // fetch rows in range (scoped to user)
+  // fetch both manually entered and imported shifts
   useEffect(() => {
-    if (!user) return
+    if (!user || !settings) return
     ;(async () => {
       const { start, end } = range
-      const { data, error } = await supabase
+
+      // (1) get normal manually entered shifts
+      const { data: manual, error: err1 } = await supabase
         .from('shifts')
         .select('*')
         .eq('user_id', user.id)
         .gte('date', dateKeyLocal(start))
         .lt('date', dateKeyLocal(end))
         .order('date', { ascending: true })
-      if (!error) setRows(data || [])
+
+      // (2) get imported upcoming shifts — only if any location has sync enabled
+      const syncEnabled = Array.isArray(settings?.locations)
+        ? settings.locations.some(
+            (loc) =>
+              (loc?.calendar_sync_enabled === true ||
+                loc?.calendarSyncEnabled === true) && // support camelCase fallback
+              (loc?.calendar_feed_url || loc?.calendarFeedUrl),
+          )
+        : false
+
+      let imported = []
+      let err2 = null
+
+      if (syncEnabled) {
+        // Convert to local-time ISO strings (no "Z")
+        const toLocalISOString = (d) =>
+          new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+            .toISOString()
+            .slice(0, 19)
+
+        const startLocal = toLocalISOString(start)
+        const endLocal = toLocalISOString(end)
+
+        if (syncEnabled) {
+          console.log('🧭 Calendar sync detected — fetching imported shifts...')
+
+          // Convert to local-time ISO strings (no trailing "Z")
+          const toLocalISOString = (d) =>
+            new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+              .toISOString()
+              .slice(0, 19)
+
+          const startLocal = toLocalISOString(start)
+          const endLocal = toLocalISOString(end)
+
+          // 1) Get the set of already-converted calendar IDs from shifts
+          const { data: converted, error: errConv } = await supabase
+            .from('shifts')
+            .select('imported_from_calendar_id')
+            .eq('user_id', user.id)
+            .not('imported_from_calendar_id', 'is', null)
+
+          if (errConv)
+            console.error('Error fetching converted shifts:', errConv)
+
+          // 2) Get all calendar_shifts in range
+          const { data: allImports, error: errImp } = await supabase
+            .from('calendar_shifts')
+            .select('*')
+            .eq('user_id', user.id)
+            .gte('start_time', startLocal)
+            .lt('start_time', endLocal)
+
+          if (errImp) console.error('Error fetching calendar_shifts:', errImp)
+
+          // 3) Filter out any calendar_shifts already converted
+          const convertedIds = new Set(
+            (converted || []).map((r) => r.imported_from_calendar_id),
+          )
+          // The calendar_shifts table now uses external_id for matching
+          const filteredImports = (allImports || []).filter(
+            (e) => !convertedIds.has(e.external_id || e.id),
+          )
+
+          // 4) Use the filtered list
+          imported = filteredImports
+          err2 = errImp
+        } else {
+          console.log(
+            '⚙️  Calendar sync disabled — skipping imported shifts fetch.',
+          )
+        }
+      } else {
+        console.log(
+          '⚙️  Calendar sync disabled — skipping imported shifts fetch.',
+        )
+      }
+
+      if (err1) console.error('Error fetching shifts:', err1)
+      if (err2) console.error('Error fetching calendar_shifts:', err2)
+
+      // (3) normalize imported events so they look like shifts in the UI
+      const upcoming = (imported || []).map((e) => {
+        const loc =
+          Array.isArray(settings?.locations) &&
+          settings.locations.find((l) => l.id === e.location_id)
+        const locationName = loc?.name || e.location_name || 'Scheduled Shift'
+
+        // 🕒 Format the time range
+        const fmtTime = (iso) => {
+          if (!iso) return ''
+          const d = new Date(iso)
+          return d.toLocaleTimeString([], {
+            hour: 'numeric',
+            minute: '2-digit',
+          })
+        }
+        const start = fmtTime(e.start_time)
+        const end = fmtTime(e.end_time)
+        const timeRange =
+          start && end ? `${start} – ${end}` : start || end || ''
+
+        return {
+          id: `ical-${e.id}`,
+          date: dateKeyLocal(new Date(e.start_time)),
+          hours:
+            e.end_time && e.start_time
+              ? (new Date(e.end_time) - new Date(e.start_time)) / 3600000
+              : null,
+          location_id: e.location_id,
+          location_name: locationName,
+          summary: e.summary || 'Shift',
+          time_range: timeRange, // ✅ add this field
+          notes: e.summary || '',
+          imported: true,
+          original_calendar_id: e.id,
+          original_calendar_external_id: e.external_id,
+        }
+      })
+
+      console.log(
+        'Imported shifts normalized:',
+        upcoming.map((e) => ({
+          id: e.id,
+          start_time: e.start_time,
+          date: e.date,
+        })),
+      )
+
+      // (4) merge both lists and store
+      setRows([...(manual || []), ...upcoming])
     })()
-  }, [user, range.start?.getTime(), range.end?.getTime()])
+  }, [
+    user?.id,
+    range.start?.getTime(),
+    range.end?.getTime(),
+    JSON.stringify(settings),
+    syncTrigger,
+  ])
 
   // map by date
   const byDate = useMemo(() => {
@@ -234,11 +453,14 @@ export default function CalendarPage({ theme, setTheme }) {
     return map
   }, [rows])
 
-  // totals for visible period (month totals only include this month)
+  // totals for visible period (exclude imported/upcoming shifts)
   const totals = useMemo(() => {
-    let activeRows = rows
+    // Only include real, manually logged shifts
+    let activeRows = rows.filter((r) => !r.imported)
+
+    // If viewing month, further narrow to this month
     if (view === 'month') {
-      activeRows = rows.filter((r) => {
+      activeRows = activeRows.filter((r) => {
         const d = parseDateOnlyLocal(r.date)
         return (
           d.getFullYear() === cursor.getFullYear() &&
@@ -246,6 +468,7 @@ export default function CalendarPage({ theme, setTheme }) {
         )
       })
     }
+
     const net = activeRows.reduce(
       (acc, r) =>
         acc +
@@ -254,10 +477,12 @@ export default function CalendarPage({ theme, setTheme }) {
           Number(r.tip_out_total || 0)),
       0,
     )
+
     const totalHours = activeRows.reduce(
       (acc, r) => acc + Number(r.hours || 0),
       0,
     )
+
     const eff = totalHours > 0 ? net / totalHours : 0
     return { net, hours: totalHours, eff }
   }, [rows, view, cursor])
@@ -305,7 +530,7 @@ export default function CalendarPage({ theme, setTheme }) {
 
   async function handleAddSave(payload) {
     if (!user) return alert('Sign in first')
-
+    const originalCalendarId = prefillShift?.original_calendar_id || null
     // --- (A) Try to fetch a weather snapshot (if enabled + coords available) ---
     let weather_snapshot = null
     try {
@@ -353,6 +578,14 @@ export default function CalendarPage({ theme, setTheme }) {
       ...payload,
       ...(weather_snapshot ? { weather_snapshot } : {}), // only include if fetched
     }
+    if (prefillShift?.original_calendar_external_id) {
+      // ✅ Use Google UID for permanent linkage
+      dbRow.imported_from_calendar_id =
+        prefillShift.original_calendar_external_id
+    } else if (prefillShift?.original_calendar_id) {
+      // fallback for old data
+      dbRow.imported_from_calendar_id = prefillShift.original_calendar_id
+    }
 
     const { data, error } = await supabase
       .from('shifts')
@@ -364,6 +597,27 @@ export default function CalendarPage({ theme, setTheme }) {
       alert(error.message)
       return
     }
+    // --- (C) If this was created from a scheduled shift, remove that original calendar entry ---
+    if (originalCalendarId) {
+      const { error: delErr } = await supabase
+        .from('calendar_shifts')
+        .delete()
+        .eq('id', originalCalendarId)
+        .eq('user_id', user.id)
+
+      if (delErr)
+        console.error('Error deleting imported calendar shift:', delErr)
+      else console.log('Deleted imported calendar shift:', originalCalendarId)
+
+      // Remove the deleted one from rows immediately
+      setRows((prev) =>
+        prev.filter((r) => r.id !== `ical-${originalCalendarId}`),
+      )
+    }
+
+    // Clear prefill reference
+    setPrefillShift(null)
+
     setRows((prev) => [...prev, data])
     setAddOpen(false)
   }
@@ -413,6 +667,7 @@ export default function CalendarPage({ theme, setTheme }) {
             <button className="cal-btn" onClick={() => setCursor(new Date())}>
               Today
             </button>
+
             <button
               className="cal-btn"
               onClick={() => {
@@ -455,7 +710,13 @@ export default function CalendarPage({ theme, setTheme }) {
             </div>
           </div>
         </div>
-
+        {anyCalendarSyncEnabled && (
+          <div className="sync-banner">
+            <button className="sync-btn" onClick={handleManualCalendarSync}>
+              Sync with Schedule(s)
+            </button>
+          </div>
+        )}
         {/* Compact KPI Summary */}
         <div className="card kpi-summary compact" style={{ marginBottom: 8 }}>
           <div className="kpi-grid">
@@ -562,7 +823,15 @@ export default function CalendarPage({ theme, setTheme }) {
                     {innerLabel}
                   </span>
                 </div>
-                {hasShifts && <div className="dot" aria-hidden />}
+                {hasShifts && (
+                  <div
+                    className={`dot ${
+                      shifts.every((s) => s.imported) ? 'dot-gray' : ''
+                    }`}
+                    aria-hidden
+                  />
+                )}
+
                 {weatherEmoji && (
                   <div
                     className="weather-emoji-small"
@@ -788,36 +1057,79 @@ export default function CalendarPage({ theme, setTheme }) {
                 </div>
 
                 {preview.map((shift) => {
+                  const isImported = shift.imported
                   const net =
                     Number(shift.cash_tips || 0) +
                     Number(shift.card_tips || 0) -
                     Number(shift.tip_out_total || 0)
                   const eff =
                     Number(shift.hours || 0) > 0 ? net / Number(shift.hours) : 0
+
                   return (
                     <div
                       key={shift.id}
-                      className="cal-shift"
+                      className={`cal-shift ${isImported ? 'draft' : ''}`}
                       onClick={(e) => {
                         e.stopPropagation()
-                        setSelectedShift(shift)
+                        if (isImported) {
+                          // open AddShiftModal prefilled with imported shift details
+                          setPrefillShift({
+                            date: shift.date,
+                            hours: shift.hours || '',
+                            location_id: shift.location_id || '',
+                            location_name: shift.location_name || '',
+                            notes: shift.notes || '',
+                            original_calendar_id: shift.original_calendar_id, // still used for deletion
+                            original_calendar_external_id:
+                              shift.original_calendar_external_id ||
+                              shift.external_id ||
+                              null, // ✅ correct field
+                          })
+
+                          setAddDate(shift.date)
+                          setAddOpen(true)
+                          setSelectedShift(null)
+                        } else {
+                          setSelectedShift(shift)
+                        }
                       }}
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') setSelectedShift(shift)
+                        if (e.key === 'Enter') {
+                          if (isImported) {
+                            setAddDate(shift.date)
+                            setAddOpen(true)
+                            setSelectedShift(null)
+                          } else {
+                            setSelectedShift(shift)
+                          }
+                        }
                       }}
                     >
                       <div>
-                        <b>{currencyFormatter.format(net)}</b> {S.middot}{' '}
-                        {Number(shift.hours || 0).toFixed(2)}h
-                      </div>
-                      <div className="note">
-                        {currencyFormatter.format(eff)} /h
+                        {isImported ? (
+                          <>
+                            <b>{shift.location_name || 'Scheduled Shift'}</b>
+                            <div className="note">
+                              {shift.summary || 'Shift'}
+                              {shift.time_range ? ` ${shift.time_range}` : ''}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <b>{currencyFormatter.format(net)}</b> {S.middot}{' '}
+                            {Number(shift.hours || 0).toFixed(2)}h
+                            <div className="note">
+                              {currencyFormatter.format(eff)} /h
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   )
                 })}
+
                 {more > 0 && <div className="cal-more">+{more} more</div>}
               </div>
             )
@@ -866,8 +1178,27 @@ export default function CalendarPage({ theme, setTheme }) {
         date={daySheetDate}
         shifts={byDate.get(daySheetDate) || []}
         onClose={() => setDaySheetOpen(false)}
-        onAdd={(dateObj) => {
-          openAddFor(dateObj)
+        onAdd={(dateObj, shift) => {
+          if (shift?.imported) {
+            // ✅ Prefill AddShiftModal for imported calendar event
+            setPrefillShift({
+              date: shift.date,
+              hours: shift.hours || '',
+              location_id: shift.location_id || '',
+              location_name: shift.location_name || '',
+              notes: shift.notes || '',
+              summary: shift.summary || '',
+              original_calendar_id: shift.original_calendar_id,
+              original_calendar_external_id:
+                shift.original_calendar_external_id ||
+                shift.external_id ||
+                null,
+            })
+          }
+
+          setAddDate(dateKeyLocal(dateObj))
+          setAddOpen(true)
+          setSelectedShift(null)
           setDaySheetOpen(false)
         }}
         onOpenShift={(shift) => {
@@ -881,7 +1212,11 @@ export default function CalendarPage({ theme, setTheme }) {
         <AddShiftModal
           open={true}
           initialDate={addDate}
-          onClose={() => setAddOpen(false)}
+          initialValues={prefillShift || {}}
+          onClose={() => {
+            setAddOpen(false)
+            setPrefillShift(null)
+          }}
           onSave={handleAddSave}
         />
       )}
@@ -890,6 +1225,55 @@ export default function CalendarPage({ theme, setTheme }) {
 
       <style jsx>{`
         /* === Calendar Grid (compact modes) === */
+        .sync-banner {
+          margin: 12px 0 8px;
+          display: flex;
+          justify-content: center;
+        }
+
+        .sync-btn {
+          width: 100%;
+          max-width: 600px;
+          background: var(--brand, #2563eb);
+          color: white;
+          font-weight: 600;
+          font-size: 15px;
+          padding: 10px 0;
+          border: none;
+          border-radius: 12px;
+          box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+          cursor: pointer;
+          transition:
+            background 0.2s,
+            transform 0.1s;
+        }
+
+        .sync-btn:hover {
+          background: #1d4ed8;
+        }
+
+        .sync-btn:active {
+          transform: translateY(1px);
+        }
+
+        @media (max-width: 640px) {
+          .sync-btn {
+            font-size: 14px;
+            padding: 9px 0;
+            max-width: none;
+          }
+        }
+        :global(.cal-shift.draft) {
+          opacity: 0.65;
+          font-style: italic;
+          border: 1px dashed var(--border);
+          background: #f9fafb;
+          cursor: pointer;
+        }
+        :global(.cal-shift.draft:hover) {
+          background: #f1f5f9;
+        }
+
         :global(.cal-grid.cal-week.compact),
         :global(.cal-grid.cal-month.compact) {
           grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -918,8 +1302,8 @@ export default function CalendarPage({ theme, setTheme }) {
           align-self: flex-start;
           margin-left: 2px;
         }
-        :global(.cal-cell.compact.busy) {
-          background: #f9fafb;
+        :global(.cal-cell.compact .dot-gray) {
+          background: #9ca3af; /* Tailwind gray-400 */
         }
 
         /* Avoid overflow in shift previews */

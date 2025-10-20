@@ -24,6 +24,7 @@ export default function AddShiftModal({
   showCashInput, // boolean (optional)
   showCardInput, // boolean (optional)
   defaultTipoutPct, // number | null
+  initialValues = {},
 }) {
   const { settings } = useSettings()
 
@@ -77,10 +78,21 @@ export default function AddShiftModal({
     return id
   }, [settings, activeLocations])
 
-  const [locationId, setLocationId] = useState(defaultLocationId)
+  // --- Location setup ---
+  // Prefer initialValues.location_id (e.g., imported shift) over defaults
+  const [locationId, setLocationId] = useState(
+    initialValues?.location_id || defaultLocationId || null,
+  )
+
+  // Update when defaults change (but don't overwrite a prefilled value)
   useEffect(() => {
-    setLocationId(defaultLocationId)
-  }, [defaultLocationId])
+    if (initialValues?.location_id) {
+      setLocationId(initialValues.location_id)
+    } else {
+      setLocationId(defaultLocationId || null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [defaultLocationId, initialValues?.location_id])
 
   const currentLocation = useMemo(
     () => activeLocations.find((l) => l.id === locationId) || null,
@@ -117,23 +129,40 @@ export default function AddShiftModal({
   // reset form when opening (only depends on `open`)
   useEffect(() => {
     if (!open) return
-    setDate(initialDate || isoDate(new Date()))
-    setHours('')
-    setSales('')
-    setCash('')
-    setCard('')
-    setTipOut('')
-    setNotes('')
+
+    // if we have prefilled data (e.g. from a calendar shift)
+    if (initialValues && Object.keys(initialValues).length > 0) {
+      setDate(initialValues.date || initialDate || isoDate(new Date()))
+      setHours(initialValues.hours ? String(initialValues.hours) : '')
+      setSales(initialValues.sales ? String(initialValues.sales) : '')
+      setCash(initialValues.cash ? String(initialValues.cash) : '')
+      setCard(initialValues.card ? String(initialValues.card) : '')
+      setTipOut(initialValues.tip_out ? String(initialValues.tip_out) : '')
+      setNotes('')
+      setLocationId(initialValues.location_id || defaultLocationId || null)
+      setJobId(null)
+      setDiscount('')
+      setSelectedSections([])
+    } else {
+      // default blank form if no prefill
+      setDate(initialDate || isoDate(new Date()))
+      setHours('')
+      setSales('')
+      setCash('')
+      setCard('')
+      setTipOut('')
+      setNotes('')
+      setLocationId(defaultLocationId || null)
+      setJobId(null)
+      setDiscount('')
+      setSelectedSections([])
+    }
+
     setTipOutDirty(false)
-    setLocationId(defaultLocationId || null)
-    setJobId(null)
-    setDiscount('')
-    setSelectedSections([])
-    // lock background scroll
     document.body.classList.add('modal-open')
     return () => document.body.classList.remove('modal-open')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  }, [open, initialValues])
 
   // helpers
   const sanitizeCurrencyValue = (input) => {
