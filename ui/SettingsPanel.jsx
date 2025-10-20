@@ -14,11 +14,11 @@ function uid() {
 /** Keep inputs as-typed; trim on save only */
 function normalizeLocation(raw) {
   const jobs = Array.isArray(raw?.jobs) ? raw.jobs : []
+
   return {
     id: raw?.id || uid(),
     name: String(raw?.name ?? ''),
     active: typeof raw?.active === 'boolean' ? raw.active : true,
-    // weather fields
     address: typeof raw?.address === 'string' ? raw.address : '',
     lat: typeof raw?.lat === 'number' ? raw.lat : null,
     lon: typeof raw?.lon === 'number' ? raw.lon : null,
@@ -29,6 +29,17 @@ function normalizeLocation(raw) {
       active: typeof j?.active === 'boolean' ? j.active : true,
       _isNew: undefined,
     })),
+
+    // 👇 new calendar fields preserved from Supabase
+    calendar_sync_enabled:
+      typeof raw?.calendar_sync_enabled === 'boolean'
+        ? raw.calendar_sync_enabled
+        : false,
+    calendar_feed_url:
+      typeof raw?.calendar_feed_url === 'string' ? raw.calendar_feed_url : '',
+    last_calendar_sync: raw?.last_calendar_sync ?? null,
+    calendar_status: raw?.calendar_status ?? 'idle',
+    calendar_last_error: raw?.calendar_last_error ?? null,
   }
 }
 
@@ -460,6 +471,20 @@ export default function SettingsPanel({
       transform({ ...draft?.locations?.find((l) => l.id === id) }),
     )
   }
+  // Calendar helpers
+  function toggleCalendarSync(id, enabled) {
+    updateLocation(id, (l) => ({
+      ...l,
+      calendar_sync_enabled: enabled,
+    }))
+  }
+
+  function setCalendarUrl(id, url) {
+    updateLocation(id, (l) => ({
+      ...l,
+      calendar_feed_url: url,
+    }))
+  }
 
   // Jobs helpers
   function addJob(locationId) {
@@ -715,8 +740,230 @@ export default function SettingsPanel({
 
         {showProCard && (
           <div className="ts-pro-content" style={{ padding: 12 }}>
-            {/* Weather (global) */}
+            {/* ---- Calendar Sync (per location) ---- */}
+            <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
+              Sync with Calendar
+            </div>
 
+            {(() => {
+              // find selected location or fallback
+              const loc =
+                draft.locations.find((l) => l.id === selectedLocationId) ||
+                draft.locations.find(
+                  (l) => l.id === draft.default_location_id,
+                ) ||
+                draft.locations[0]
+
+              if (!loc) return null
+
+              return (
+                <>
+                  {/* --- Choose Location --- */}
+                  {draft.multiple_locations && draft.locations?.length > 1 && (
+                    <label
+                      className="field"
+                      style={{ maxWidth: 360, marginBottom: 10 }}
+                    >
+                      <span className="field-label">Select Location</span>
+                      <select
+                        className="input"
+                        value={selectedLocationId || loc.id || ''}
+                        onChange={(e) =>
+                          setSelectedLocationId(e.target.value || null)
+                        }
+                      >
+                        {draft.locations
+                          .filter((l) => l.active !== false)
+                          .map((l) => (
+                            <option key={l.id} value={l.id}>
+                              {l.name || '(Untitled)'}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                  )}
+
+                  {/* --- Toggle --- */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 8,
+                      flexWrap: 'wrap',
+                      marginTop: 2,
+                    }}
+                  >
+                    <div
+                      style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                    >
+                      <span>
+                        Automatically import shifts from your schedule calendar
+                      </span>
+                      <span
+                        style={{
+                          padding: '2px 8px',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          borderRadius: '999px',
+                          background:
+                            planTier === 'pro' || planTier === 'founder'
+                              ? '#facc15'
+                              : '#e5e7eb',
+                          color:
+                            planTier === 'pro' || planTier === 'founder'
+                              ? '#1f2937'
+                              : '#6b7280',
+                          border: '1px solid #d1d5db',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.3px',
+                        }}
+                      >
+                        Pro
+                      </span>
+                    </div>
+
+                    <Switch
+                      checked={!!loc.calendar_sync_enabled}
+                      onChange={(v) => {
+                        const entitled =
+                          planTier === 'pro' ||
+                          planTier === 'founder' ||
+                          user?.pro_override
+                        if (!entitled) {
+                          setShowUpgradeModal(true)
+                          return
+                        }
+                        toggleCalendarSync(loc.id, v)
+                      }}
+                      title="Sync with Calendar"
+                    />
+                  </div>
+
+                  {/* --- Conditional .ics input + info --- */}
+                  {loc.calendar_sync_enabled ? (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        borderLeft: '2px solid #ddd',
+                        paddingLeft: 12,
+                      }}
+                    >
+                      <div className="note" style={{ marginBottom: 6 }}>
+                        Paste your <code>.ics</code> calendar link for{' '}
+                        <strong>{loc.name}</strong>.
+                      </div>
+
+                      <input
+                        type="url"
+                        className="input"
+                        placeholder="https://example.com/my-schedule.ics"
+                        value={loc.calendar_feed_url || ''}
+                        onChange={(e) => setCalendarUrl(loc.id, e.target.value)}
+                      />
+
+                      <details
+                        style={{ fontSize: 12, marginTop: 6, color: '#6b7280' }}
+                      >
+                        <summary>Where to find my calendar link</summary>
+                        <ul
+                          style={{
+                            marginTop: 4,
+                            listStyle: 'disc',
+                            paddingLeft: 18,
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          <li>
+                            <strong>HotSchedules:</strong> “My Schedule” → “Add
+                            to Calendar” → Copy link
+                          </li>
+                          <li>
+                            <strong>Restaurant365:</strong> “My Schedule” → “Add
+                            to Calendar” → Copy iCal link
+                          </li>
+                          <li>
+                            <strong>7Shifts:</strong> Profile → “Sync Calendar”
+                            → Copy Calendar Feed URL
+                          </li>
+                        </ul>
+                        <p style={{ fontStyle: 'italic', marginTop: 4 }}>
+                          The link should start with <code>https://</code> and
+                          end with <code>.ics</code>.
+                        </p>
+                      </details>
+
+                      <p
+                        className="note"
+                        style={{ fontSize: 12, marginTop: 4 }}
+                      >
+                        TallyShift only reads your schedule times — it never
+                        edits or shares your calendar.
+                      </p>
+                      {/* --- Sync Status Line --- */}
+                      {(loc.last_calendar_sync || loc.calendar_last_error) && (
+                        <div
+                          style={{
+                            marginTop: 6,
+                            fontSize: 12,
+                            color:
+                              loc.calendar_status === 'error'
+                                ? '#b91c1c'
+                                : loc.calendar_status === 'syncing'
+                                  ? '#1d4ed8'
+                                  : '#6b7280',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                          }}
+                        >
+                          {loc.calendar_status === 'error' ? '⚠️' : '🕒'}
+                          {loc.calendar_status === 'error' ? (
+                            <>
+                              <span>
+                                Last attempt:{' '}
+                                {loc.last_calendar_sync
+                                  ? new Date(
+                                      loc.last_calendar_sync,
+                                    ).toLocaleString()
+                                  : 'never'}
+                              </span>
+                              <span style={{ fontStyle: 'italic' }}>
+                                ({loc.calendar_last_error})
+                              </span>
+                            </>
+                          ) : (
+                            <span>
+                              Last synced:{' '}
+                              {loc.last_calendar_sync
+                                ? new Date(
+                                    loc.last_calendar_sync,
+                                  ).toLocaleString()
+                                : 'never'}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="note" style={{ marginTop: 6 }}>
+                      Enable the toggle above to link a schedule calendar for{' '}
+                      <strong>{loc.name}</strong>.
+                    </div>
+                  )}
+
+                  {/* Divider below section */}
+                  <div
+                    style={{
+                      borderTop: '1px solid #ddd',
+                      margin: '12px 0',
+                    }}
+                  />
+                </>
+              )
+            })()}
+
+            {/* Weather (global) */}
             <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
               Weather
             </div>
@@ -772,12 +1019,10 @@ export default function SettingsPanel({
                 title="Track weather"
               />
             </div>
-
             <div className="note" style={{ marginTop: 6 }}>
               Requires an address per active location (we’ll look up coordinates
               automatically).
             </div>
-
             {/* --- Divider line --- */}
             <div
               style={{
@@ -786,7 +1031,6 @@ export default function SettingsPanel({
               }}
             />
             {/* Multi-locations toggle + default selector */}
-
             <div
               style={{
                 display: 'grid',
@@ -845,7 +1089,6 @@ export default function SettingsPanel({
                 title="Multiple locations"
               />
             </div>
-
             {draft.multiple_locations && (
               <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
                 <label className="field" style={{ maxWidth: 360 }}>
@@ -895,7 +1138,6 @@ export default function SettingsPanel({
                 margin: '12px 0',
               }}
             />
-
             {/* Track Sections (PRO Feature) */}
             <div
               style={{
@@ -953,7 +1195,6 @@ export default function SettingsPanel({
                 title="Track sections"
               />
             </div>
-
             {/* Section management (only if enabled) */}
             {draft.track_sections && (
               <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>

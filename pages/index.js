@@ -197,7 +197,7 @@ export default function Home() {
       <div className="container" style={{ display: 'grid', gap: 16 }}>
         {/* Performance Summary */}
         <div className="card perf-card">
-          <h2 className="perf-title">Performance Summary</h2>
+          <h2 className="perf-title">This Month</h2>
           <div className="perf-stack">
             <div className="stat-block">
               <div className="note">Net Tips</div>
