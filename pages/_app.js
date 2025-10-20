@@ -6,6 +6,7 @@ import { UserProvider, useUser } from '../lib/useUser'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import Head from 'next/head'
 import Script from 'next/script'
+import GlobalAnnouncementModal from '../ui/GlobalAnnouncementModal'
 
 const PUBLIC_ROUTES = ['/login', '/reset', '/reset-sent']
 
@@ -83,19 +84,16 @@ export default function MyApp({ Component, pageProps }) {
         <Head>
           <meta name="viewport" content="width=device-width, initial-scale=1" />
         </Head>
-
         <Script
           id="google-maps-places"
           src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}&libraries=places`}
           strategy="afterInteractive"
         />
-
         <div id="app-viewport" className="app-viewport">
           <Component {...pageProps} />
           <EnvironmentBadge />
         </div>
-
-        <SpeedInsights />
+        <GlobalAnnouncementModal delayMinutes={2} /> <SpeedInsights />
       </AuthGuard>
     </UserProvider>
   )
