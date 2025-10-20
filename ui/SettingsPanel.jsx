@@ -399,21 +399,33 @@ export default function SettingsPanel({
 
     const entitled = ['pro', 'founder'].includes(planTier) || user?.pro_override
 
-    // If user no longer entitled, reset and auto-save
-    if (!entitled && (draft.track_weather || draft.multiple_locations)) {
+    // If user no longer entitled, reset all paid features and auto-save
+    if (
+      !entitled &&
+      (draft.track_weather ||
+        draft.multiple_locations ||
+        draft.track_sections ||
+        draft.locations?.some((l) => l.calendar_sync_enabled))
+    ) {
       const updated = {
         ...draft,
         track_weather: false,
         multiple_locations: false,
+        track_sections: false,
+        locations: (draft.locations || []).map((l) => ({
+          ...l,
+          calendar_sync_enabled: false,
+          calendar_feed_url: '', // clear saved feed links
+        })),
       }
 
       setDraft(updated)
-
-      // Persist the change silently (no "Saving…" UI)
       ;(async () => {
         try {
           await saveSettings(updated)
-          console.log('🔄 Auto-saved: downgraded plan reset features off.')
+          console.log(
+            '🔄 Auto-saved: downgraded plan reset all Pro features off.',
+          )
         } catch (err) {
           console.warn('Auto-save after downgrade failed:', err.message)
         }
