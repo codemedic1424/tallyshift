@@ -54,7 +54,7 @@ export default async function handler(req, res) {
       mode: isLifetime ? 'payment' : 'subscription',
       customer: customerId,
       line_items: [{ price: priceId, quantity: 1 }],
-      subscription_data: { trial_period_days: 7 },
+      ...(isLifetime ? {} : { subscription_data: { trial_period_days: 7 } }),
       metadata: { userId, planType: isLifetime ? 'founder' : 'pro' },
       success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/success`,
       cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL}/profile`,
