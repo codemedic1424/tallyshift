@@ -9,6 +9,7 @@ import TabBar from '../ui/TabBar'
 import ShiftDetailsModal from '../ui/ShiftDetailsModal'
 import PaceSettingsModal from '../ui/PaceSettingsModal'
 import { useSpring, animated } from '@react-spring/web'
+import Seg from '../ui/Seg'
 
 function AnimatedNumber({ value, formatter }) {
   const [done, setDone] = useState(false)
@@ -569,24 +570,16 @@ export default function Insights() {
             Insights
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button
-              className={`cal-tab ${timeframe === TF.THIS_MONTH ? 'active' : ''}`}
-              onClick={() => setTimeframe(TF.THIS_MONTH)}
-            >
-              This month
-            </button>
-            <button
-              className={`cal-tab ${timeframe === TF.LAST_3 ? 'active' : ''}`}
-              onClick={() => setTimeframe(TF.LAST_3)}
-            >
-              Last 3 months
-            </button>
-            <button
-              className={`cal-tab ${timeframe === TF.YTD ? 'active' : ''}`}
-              onClick={() => setTimeframe(TF.YTD)}
-            >
-              Year to date
-            </button>
+            <Seg
+              value={timeframe}
+              onChange={(v) => setTimeframe(v)}
+              options={[
+                { value: TF.THIS_MONTH, label: 'This month' },
+                { value: TF.LAST_3, label: 'Last 3 months' },
+                { value: TF.YTD, label: 'Year to date' },
+              ]}
+              compact
+            />
           </div>
         </div>
         {/* Combined KPI Card */}

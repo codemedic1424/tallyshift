@@ -5,6 +5,8 @@ import { useSettings } from '../lib/useSettings'
 import UpgradeModal from './UpgradeModal'
 import AddressAutocomplete from './AddressAutocomplete'
 import Link from 'next/link'
+import Seg from './Seg'
+
 /* ---------------- utils (unchanged behavior) ---------------- */
 
 function uid() {
@@ -171,56 +173,6 @@ function Switch({ checked, onChange, disabled, title }) {
   )
 }
 
-function Seg({ value, onChange, options, compact = false }) {
-  return (
-    <div className={`seg ${compact ? 'compact' : ''}`}>
-      {options.map((opt) => (
-        <button
-          key={opt.value}
-          type="button"
-          className={value === opt.value ? 'active' : ''}
-          onClick={() => onChange(opt.value)}
-        >
-          {opt.label}
-        </button>
-      ))}
-      <style jsx>{`
-        .seg {
-          display: grid;
-          grid-auto-flow: column;
-          gap: 6px;
-          padding: 4px;
-          background: #f3f4f6;
-          border: 1px solid var(--border);
-          border-radius: 999px;
-        }
-        .seg.compact {
-          gap: 4px;
-          padding: 3px;
-        }
-        .seg button {
-          border: 0;
-          background: transparent;
-          padding: 8px 12px;
-          border-radius: 999px;
-          font-weight: 700;
-          font-size: 13px;
-          color: #374151;
-          cursor: pointer;
-        }
-        .seg.compact button {
-          padding: 6px 10px;
-          font-size: 12px;
-        }
-        .seg button.active {
-          background: #111827;
-          color: #fff;
-        }
-      `}</style>
-    </div>
-  )
-}
-
 function TinyIconBtn({ label, variant = 'neutral', onClick, disabled, title }) {
   return (
     <button
@@ -275,13 +227,11 @@ function CollapsibleCard({ title, children, defaultOpen = false }) {
     const el = contentRef.current
 
     const updateHeight = () => {
+      if (!el) return
       if (open) {
-        // expand smoothly
         el.style.maxHeight = `${el.scrollHeight}px`
         el.style.opacity = '1'
       } else {
-        // collapse smoothly
-        el.style.maxHeight = `${el.scrollHeight}px` // set current height first
         el.style.opacity = '0'
         requestAnimationFrame(() => {
           el.style.maxHeight = '0px'
@@ -289,17 +239,24 @@ function CollapsibleCard({ title, children, defaultOpen = false }) {
       }
     }
 
-    // run immediately after any change
-    requestAnimationFrame(updateHeight)
+    // Run immediately and anytime layout changes
+    updateHeight()
 
-    const resizeObserver = new ResizeObserver(() => {
-      if (open) {
-        el.style.maxHeight = `${el.scrollHeight}px`
-      }
-    })
+    // Watch for any DOM changes inside
+    const resizeObserver = new ResizeObserver(updateHeight)
     resizeObserver.observe(el)
 
-    return () => resizeObserver.disconnect()
+    // Also watch for mutations (e.g. toggles showing new inputs)
+    const mutationObserver = new MutationObserver(updateHeight)
+    mutationObserver.observe(el, { childList: true, subtree: true })
+
+    window.addEventListener('resize', updateHeight)
+
+    return () => {
+      resizeObserver.disconnect()
+      mutationObserver.disconnect()
+      window.removeEventListener('resize', updateHeight)
+    }
   }, [open, children])
 
   return (
@@ -408,11 +365,11 @@ export default function SettingsPanel({
     const el = proContentRef.current
 
     const updateHeight = () => {
+      if (!el) return
       if (showProCard) {
         el.style.maxHeight = `${el.scrollHeight}px`
         el.style.opacity = '1'
       } else {
-        el.style.maxHeight = `${el.scrollHeight}px`
         el.style.opacity = '0'
         requestAnimationFrame(() => {
           el.style.maxHeight = '0px'
@@ -420,15 +377,26 @@ export default function SettingsPanel({
       }
     }
 
-    requestAnimationFrame(updateHeight)
+    // Run immediately when state changes
+    updateHeight()
 
-    const resizeObserver = new ResizeObserver(() => {
-      if (showProCard) el.style.maxHeight = `${el.scrollHeight}px`
-    })
+    // ResizeObserver for layout shifts
+    const resizeObserver = new ResizeObserver(updateHeight)
     resizeObserver.observe(el)
 
-    return () => resizeObserver.disconnect()
-  }, [showProCard])
+    // MutationObserver for any DOM/content changes
+    const mutationObserver = new MutationObserver(updateHeight)
+    mutationObserver.observe(el, { childList: true, subtree: true })
+
+    // Handle window resize (esp. iOS keyboard)
+    window.addEventListener('resize', updateHeight)
+
+    return () => {
+      resizeObserver.disconnect()
+      mutationObserver.disconnect()
+      window.removeEventListener('resize', updateHeight)
+    }
+  }, [showProCard, draft, selectedLocationId, newSectionName])
 
   // Ensure a valid location is selected once settings (draft) load from Supabase
   useEffect(() => {
@@ -477,9 +445,6 @@ export default function SettingsPanel({
       ;(async () => {
         try {
           await saveSettings(updated)
-          console.log(
-            '🔄 Auto-saved: downgraded plan reset all Pro features off.',
-          )
         } catch (err) {
           console.warn('Auto-save after downgrade failed:', err.message)
         }
@@ -530,11 +495,6 @@ export default function SettingsPanel({
       (draft?.locations || []).map((l) =>
         l.id === id ? transform({ ...l }) : l,
       ),
-    )
-    console.log(
-      '✅ Updated location:',
-      id,
-      transform({ ...draft?.locations?.find((l) => l.id === id) }),
     )
   }
   // Calendar helpers
@@ -1121,8 +1081,8 @@ export default function SettingsPanel({
                 />
               </div>
               <div className="note" style={{ marginTop: 6 }}>
-                Requires an address per active location (we’ll look up
-                coordinates automatically).
+                Requires an address per active location. Add your address in the
+                Locations & Jobs section below.
               </div>
               {/* --- Divider line --- */}
               <div
@@ -1224,14 +1184,6 @@ export default function SettingsPanel({
                         ))}
                     </select>
                   </label>
-
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <TinyIconBtn
-                      label="+ Add location"
-                      variant="primary"
-                      onClick={addAdditionalLocation}
-                    />
-                  </div>
                 </div>
               )}
               {/* --- Divider line --- */}
@@ -1487,7 +1439,6 @@ export default function SettingsPanel({
             }))
           }
           onSetCoords={(coords) => {
-            console.log('📍 Got coords from autocomplete:', coords)
             updateLocation(primary.id, (l) => ({
               ...l,
               lat: Number(coords.lat),
@@ -1508,6 +1459,22 @@ export default function SettingsPanel({
             finalizeNewJob(primary.id, jobId, name)
           }
         />
+        {draft.multiple_locations && (
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              marginTop: 8,
+            }}
+          >
+            <TinyIconBtn
+              label="+ Add location"
+              variant="primary"
+              onClick={addAdditionalLocation}
+              title="Add another location"
+            />
+          </div>
+        )}
 
         {/* Additional (active) */}
         {draft.multiple_locations && activeAdditional.length > 0 && (
@@ -1534,12 +1501,6 @@ export default function SettingsPanel({
                   }))
                 }
                 onSetCoords={(coords) => {
-                  console.log(
-                    '📍 Got coords from autocomplete for',
-                    loc.name,
-                    loc.id,
-                    coords,
-                  )
                   updateLocation(loc.id, (l) => ({
                     ...l,
                     lat: Number(coords.lat),
@@ -1959,41 +1920,7 @@ function LocationRow({
             style={{ maxWidth: 360 }}
           />
           <div className="spacer" />
-          {onMakeDefault && !isDefault && !archived && (
-            <TinyIconBtn
-              label="Make default"
-              onClick={() => {
-                // Do your normal “make default” logic
-                onMakeDefault?.()
 
-                // Scroll to the Pro Features section
-                const card = document.getElementById('pro-features-card')
-                if (card) {
-                  // If it's collapsed, click the header to expand it
-                  const header = card.querySelector('.ts-pro-header')
-                  const content = card.querySelector('.ts-pro-content')
-                  if (header && !content) header.click()
-
-                  // Smooth scroll to it
-                  card.scrollIntoView({ behavior: 'smooth', block: 'center' })
-
-                  // After the scroll, briefly highlight the dropdown
-                  setTimeout(() => {
-                    const dropdown = document.getElementById(
-                      'default-location-dropdown',
-                    )
-                    if (dropdown) {
-                      dropdown.classList.add('highlight')
-                      setTimeout(
-                        () => dropdown.classList.remove('highlight'),
-                        1500,
-                      )
-                    }
-                  }, 600)
-                }
-              }}
-            />
-          )}
           {onToggleArchive && (
             <TinyIconBtn
               label={archived ? 'Unarchive' : 'Archive'}

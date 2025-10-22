@@ -96,6 +96,19 @@ export default function Profile() {
 
   // plan tier
   const [planTier, setplanTier] = useState('free')
+  // 🎉 Upgrade animation state
+  const [showUpgradeAnimation, setShowUpgradeAnimation] = useState(false)
+
+  useEffect(() => {
+    const shouldAnimate = localStorage.getItem(
+      'tallyshift-show-upgrade-animation',
+    )
+    if (shouldAnimate && (planTier === 'pro' || planTier === 'founder')) {
+      setShowUpgradeAnimation(true)
+      localStorage.removeItem('tallyshift-show-upgrade-animation')
+    }
+  }, [planTier])
+
   // ---------- Load profile (includes avatar_path) ----------
   useEffect(() => {
     if (!user) return
@@ -942,6 +955,271 @@ export default function Profile() {
           open={settingsOpen}
           onClose={() => setSettingsOpen(false)}
         />
+      )}
+      {showUpgradeAnimation && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.6)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            animation: 'fadeIn 0.4s ease',
+          }}
+        >
+          <div
+            style={{
+              textAlign: 'center',
+              transformOrigin: 'center',
+              animation: 'zoomIn 0.5s ease forwards',
+            }}
+          >
+            {/* Avatar wrapper (allows overflow) */}
+            <div
+              style={{
+                position: 'relative',
+                width: 120,
+                height: 120,
+                margin: '0 auto 12px',
+                transform: 'scale(0.8)',
+                animation: 'popIn 0.6s ease-out forwards',
+                zIndex: 2,
+                overflow: 'visible', // 👈 badge can escape this
+              }}
+            >
+              {/* Inner avatar circle (keeps circular crop) */}
+              <div
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  height: '100%',
+                  borderRadius: '50%',
+                  overflow: 'hidden', // 👈 keeps image circular
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+                  background: '#f3f4f6',
+                }}
+              >
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt="Profile"
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 40,
+                      fontWeight: 700,
+                      color: '#2764c7',
+                      background: 'white',
+                    }}
+                  >
+                    {initials || '👤'}
+                  </div>
+                )}
+              </div>
+
+              {/* 🏅 Badge (now sibling, not child of masked image) */}
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: '50%',
+                  opacity: 0,
+                  transform: 'translate(-50%, 140%) scale(0.2) rotate(-15deg)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  background:
+                    planTier === 'founder'
+                      ? 'linear-gradient(90deg, #eab308, #f59e0b)'
+                      : 'linear-gradient(90deg, #facc15, #fde047)',
+                  color: '#3a2c00',
+                  fontWeight: 700,
+                  borderRadius: 40,
+                  padding: '6px 14px',
+                  fontSize: 14,
+                  boxShadow: '0 2px 10px rgba(0,0,0,0.25)',
+                  animation:
+                    'badgeReveal 1.2s cubic-bezier(0.3, 1.4, 0.3, 1) forwards 0.9s, badgeGlow 1.8s ease 2.2s',
+                  zIndex: 3,
+                }}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  style={{
+                    width: 16,
+                    height: 16,
+                    flexShrink: 0,
+                    filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.3))',
+                  }}
+                >
+                  <path d="M5 16l-1-9 4 3 4-6 4 6 4-3-1 9H5zm0 2h14v2H5v-2z" />
+                </svg>
+                <span>{planTier === 'founder' ? 'Founder' : 'Pro'}</span>
+                {/* ✨ Sparkles */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '-15px',
+                    left: '-10px',
+                    width: '120%',
+                    height: '120%',
+                    pointerEvents: 'none',
+                    overflow: 'visible',
+                    zIndex: 2,
+                  }}
+                >
+                  {[...Array(10)].map((_, i) => (
+                    <span
+                      key={i}
+                      style={{
+                        position: 'absolute',
+                        top: `${Math.random() * 100}%`,
+                        left: `${Math.random() * 100}%`,
+                        width: 4,
+                        height: 4,
+                        borderRadius: '50%',
+                        background:
+                          'radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(255,230,100,0.6) 70%)',
+                        opacity: 0,
+                        animation: `sparkleTwinkle 1.2s ease-out ${0.8 + Math.random() * 0.4}s forwards`,
+                        transform: `scale(${0.6 + Math.random()})`,
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <h2
+              style={{
+                color: 'white',
+                fontSize: 24,
+                fontWeight: 700,
+                marginBottom: 8,
+                animation: 'fadeUp 0.8s ease forwards 1.2s',
+              }}
+            >
+              Welcome to TallyShift {planTier === 'founder' ? 'Founder' : 'Pro'}
+              !
+            </h2>
+
+            <p
+              style={{
+                color: 'rgba(255,255,255,0.85)',
+                fontSize: 15,
+                marginBottom: 20,
+                animation: 'fadeUp 0.8s ease forwards 1.3s',
+              }}
+            >
+              You’ve unlocked premium insights and features.
+            </p>
+
+            <button
+              onClick={() => setShowUpgradeAnimation(false)}
+              style={{
+                background: '#2764c7',
+                color: 'white',
+                border: 'none',
+                borderRadius: 50,
+                padding: '10px 26px',
+                fontSize: 15,
+                fontWeight: 600,
+                cursor: 'pointer',
+                boxShadow: '0 3px 10px rgba(0,0,0,0.25)',
+                animation: 'fadeUp 0.8s ease forwards 1.6s',
+              }}
+            >
+              Continue
+            </button>
+          </div>
+
+          <style>{`
+          @keyframes sparkleTwinkle {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) translateY(10px);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.2) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.8) translateY(-15px);
+  }
+}
+
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes zoomIn {
+        from { transform: scale(0.9); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+      }
+      @keyframes popIn {
+        0% { transform: scale(0.5); opacity: 0; }
+        60% { transform: scale(1.1); opacity: 1; }
+        100% { transform: scale(1); }
+      }
+        @keyframes badgeReveal {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 140%) scale(0.2) rotate(-15deg);
+    filter: brightness(1.3);
+  }
+  40% {
+    opacity: 1;
+    transform: translate(-50%, 50%) scale(1.2) rotate(3deg);
+    filter: brightness(1.5);
+  }
+  70% {
+    transform: translate(-50%, 50%) scale(0.95) rotate(-2deg);
+    filter: brightness(1);
+  }
+  100% {
+    transform: translate(-50%, 50%) scale(1) rotate(0deg);
+    opacity: 1;
+    filter: brightness(1);
+  }
+}
+
+@keyframes badgeGlow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 35px 10px rgba(250, 204, 21, 0.4);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(250, 204, 21, 0);
+  }
+}
+
+
+      @keyframes fadeUp {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+    
+
+    `}</style>
+        </div>
       )}
 
       <TabBar />
