@@ -72,6 +72,13 @@ function initFromSettings(s) {
     sections: Array.isArray(s?.sections)
       ? s.sections.map((name) => String(name).trim())
       : [],
+    track_tags: typeof s?.track_tags === 'boolean' ? s.track_tags : false,
+    tags: Array.isArray(s?.tags)
+      ? s.tags.map((t) => ({
+          name: String(t.name).trim(),
+          color: t.color || '#3b82f6', // default blue
+        }))
+      : [],
   }
 
   // ---- normalize each location and include saved sections ----
@@ -359,6 +366,8 @@ export default function SettingsPanel({
   })
   const [newSectionName, setNewSectionName] = useState('')
   const proContentRef = useRef(null)
+  const [newTagName, setNewTagName] = useState('')
+  const [newTagColor, setNewTagColor] = useState('#3b82f6')
 
   useEffect(() => {
     if (!proContentRef.current) return
@@ -434,6 +443,7 @@ export default function SettingsPanel({
         track_weather: false,
         multiple_locations: false,
         track_sections: false,
+        track_tags: false,
         locations: (draft.locations || []).map((l) => ({
           ...l,
           calendar_sync_enabled: false,
@@ -646,6 +656,13 @@ export default function SettingsPanel({
         sections: Array.isArray(l.sections)
           ? l.sections.map((s) => String(s).trim()).filter(Boolean)
           : [], // ✅ keep existing sections on save
+        track_tags: !!draft.track_tags,
+        tags: (draft.tags || [])
+          .map((t) => ({
+            name: String(t.name || '').trim(),
+            color: t.color || '#3b82f6',
+          }))
+          .filter((t) => t.name.length > 0),
       })),
     }
 
@@ -1395,6 +1412,209 @@ export default function SettingsPanel({
                       </div>
                     )
                   })()}
+                </div>
+              )}
+              {/* --- Divider line --- */}
+              <div
+                style={{
+                  borderTop: '1px solid #ddd',
+                  margin: '12px 0',
+                }}
+              />
+
+              {/* Shift Tags (PRO Feature) */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr auto',
+                  alignItems: 'center',
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: 'grid', gap: 4 }}>
+                  <div
+                    style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                  >
+                    <div style={{ fontWeight: 700 }}>Shift Tags</div>
+                    <span
+                      style={{
+                        padding: '2px 8px',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        borderRadius: '999px',
+                        background:
+                          planTier === 'pro' || planTier === 'founder'
+                            ? '#facc15'
+                            : '#e5e7eb',
+                        color:
+                          planTier === 'pro' || planTier === 'founder'
+                            ? '#1f2937'
+                            : '#6b7280',
+                        border: '1px solid #d1d5db',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.3px',
+                      }}
+                    >
+                      Pro
+                    </span>
+                  </div>
+                  <div className="note">
+                    Create custom tags to label your shifts (e.g. “Private
+                    Event”, “Wedding”, “Slow Night”). Each tag can have its own
+                    color.
+                  </div>
+                </div>
+
+                <Switch
+                  checked={!!draft.track_tags}
+                  onChange={(v) => {
+                    const entitled =
+                      planTier === 'pro' ||
+                      planTier === 'founder' ||
+                      user?.pro_override
+                    if (!entitled) {
+                      setShowUpgradeModal(true)
+                      return
+                    }
+                    setField('track_tags', v)
+                  }}
+                  title="Enable shift tags"
+                />
+              </div>
+
+              {/* Tag Management */}
+              {draft.track_tags && (
+                <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+                  {/* Add Tag */}
+                  <label className="field" style={{ maxWidth: 360 }}>
+                    <span className="field-label">Add Tag</span>
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 8,
+                      }}
+                    >
+                      <input
+                        type="text"
+                        className="input"
+                        placeholder="e.g., Private Event"
+                        value={newTagName}
+                        onChange={(e) => setNewTagName(e.target.value)}
+                      />
+
+                      {/* Predefined pastel color palette */}
+                      <div
+                        style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}
+                      >
+                        {[
+                          '#fde68a', // soft yellow
+                          '#fbcfe8', // pink
+                          '#a5f3fc', // cyan
+                          '#bbf7d0', // mint green
+                          '#c7d2fe', // periwinkle
+                          '#fca5a5', // coral
+                          '#fdba74', // orange
+                          '#f9a8d4', // rose
+                          '#d9f99d', // light lime
+                        ].map((color) => (
+                          <button
+                            key={color}
+                            type="button"
+                            onClick={() => setNewTagColor(color)}
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: 8,
+                              border:
+                                newTagColor === color
+                                  ? '2px solid #111827'
+                                  : '1px solid #d1d5db',
+                              background: color,
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                            }}
+                          />
+                        ))}
+                      </div>
+
+                      <button
+                        className="btn btn-primary"
+                        type="button"
+                        disabled={!newTagName.trim()}
+                        onClick={() => {
+                          const name = newTagName.trim()
+                          if (!name) return
+                          setDraft((d) => ({
+                            ...d,
+                            tags: [
+                              ...(d.tags || []),
+                              { name, color: newTagColor || '#c7d2fe' },
+                            ].filter(
+                              (v, i, arr) =>
+                                arr.findIndex(
+                                  (x) =>
+                                    x.name.toLowerCase() ===
+                                    v.name.toLowerCase(),
+                                ) === i,
+                            ),
+                          }))
+                          setNewTagName('')
+                          setNewTagColor('#c7d2fe')
+                        }}
+                        style={{ alignSelf: 'flex-start', marginTop: 6 }}
+                      >
+                        Add Tag
+                      </button>
+                    </div>
+                  </label>
+
+                  {/* Tag list */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {(draft.tags || []).map((tag, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '6px 10px',
+                          borderRadius: 999,
+                          background: tag.color,
+                          color: '#1f2937', // ✅ dark text instead of white
+                          fontSize: 13,
+                          border: '1px solid rgba(0,0,0,0.08)',
+                        }}
+                      >
+                        <span>{tag.name}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDraft((d) => ({
+                              ...d,
+                              tags: d.tags.filter((t) => t.name !== tag.name),
+                            }))
+                          }
+                          style={{
+                            border: 'none',
+                            background: 'transparent',
+                            color: '#6b7280',
+                            fontWeight: 700,
+                            borderRadius: 999,
+                            padding: '0 6px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    {(!draft.tags || draft.tags.length === 0) && (
+                      <div style={{ fontSize: 13, color: '#9ca3af' }}>
+                        No tags added yet.
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
