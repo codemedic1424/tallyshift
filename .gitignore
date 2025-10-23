@@ -1,6 +1,78 @@
-# Xcode user state (do not track)
-*.xcuserdatad
+# ======== iOS / Xcode ========
+build/
+DerivedData/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
 *.xcuserstate
 *.xccheckout
 *.xcscmblueprint
+*.moved-aside
 *.xcworkspace/xcuserdata/
+*.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
+*.xcarchive
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.swiftpm/
+.build/
+Packages/
+Package.pins
+Package.resolved
+
+# CocoaPods
+Pods/
+Podfile.lock
+
+# Carthage
+Carthage/
+Carthage/Build/
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output/
+
+# ======== Node / Web (Next.js) ========
+node_modules/
+.next/
+out/
+dist/
+.env
+.env.*
+.npmrc
+.yarnrc
+package-lock.json
+yarn.lock
+coverage/
+.vscode/
+.DS_Store
+
+# ======== Supabase ========
+.supabase/
+supabase/.temp/
+supabase/.cache/
+supabase/.env
+supabase/.env.local
+supabase/.env.development
+supabase/.env.production
+supabase/config.toml
+
+# ======== Misc / macOS ========
+*.log
+*.swp
+*.swo
+Thumbs.db
+.DS_Store
+._*
+*.icloud
+.idea/
