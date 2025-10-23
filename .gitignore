@@ -1,0 +1,6 @@
+# Xcode user state (do not track)
+*.xcuserdatad
+*.xcuserstate
+*.xccheckout
+*.xcscmblueprint
+*.xcworkspace/xcuserdata/
