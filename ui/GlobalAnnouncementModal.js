@@ -111,9 +111,8 @@ export default function AddToHomeScreenModal({ delayMinutes = 2 }) {
                 padding: '0 6px',
               }}
             >
-              Faster access, full-screen experience. After installing, enable
-              <strong> WebApp Mode</strong> in your Profile for the most
-              “native” feel.
+              Faster access, full-screen experience. After installing, access
+              the app directly from your home screen like any other app.
             </p>
 
             {/* Instructions / Android one-tap */}

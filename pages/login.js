@@ -21,6 +21,47 @@ export default function Login() {
   const [msg, setMsg] = useState(null)
 
   const emailRef = useRef(null)
+  // Add new state hooks near the top
+  const [agreeTerms, setAgreeTerms] = useState(false)
+  const [emailOptIn, setEmailOptIn] = useState(false)
+
+  // inside onSignUp()
+  async function onSignUp(e) {
+    e.preventDefault()
+    setErr(null)
+    setMsg(null)
+    if (!emailOk) return setErr('Enter a valid email.')
+    if (!pwValid) return setErr('Password doesn’t meet the requirements.')
+    if (!matchOK) return setErr('Passwords do not match.')
+    if (!agreeTerms)
+      return setErr('You must agree to the Terms and Conditions to continue.')
+
+    setLoading(true)
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { email_opt_in: emailOptIn }, // ✅ this saves the opt-in flag in user_metadata
+      },
+    })
+    setLoading(false)
+
+    if (error) setErr(error.message)
+    else {
+      // ✅ store email_opt_in in your profiles table
+      const userId = data?.user?.id
+      if (userId) {
+        await supabase
+          .from('profiles')
+          .update({ email_opt_in: emailOptIn })
+          .eq('id', userId)
+      }
+
+      setMsg(
+        'Account created! Check your email for the confirmation link to login.',
+      )
+    }
+  }
 
   useEffect(() => {
     if (user) router.replace('/')
@@ -63,23 +104,6 @@ export default function Login() {
     setLoading(false)
     if (error) setErr(error.message)
     else router.replace('/?onboard=1')
-  }
-
-  async function onSignUp(e) {
-    e.preventDefault()
-    setErr(null)
-    setMsg(null)
-    if (!emailOk) return setErr('Enter a valid email.')
-    if (!pwValid) return setErr('Password doesn’t meet the requirements.')
-    if (!matchOK) return setErr('Passwords do not match.')
-    setLoading(true)
-    const { error } = await supabase.auth.signUp({ email, password })
-    setLoading(false)
-    if (error) setErr(error.message)
-    else
-      setMsg(
-        'Account created. Check your email and click the confirmation link to login!',
-      )
   }
 
   async function onReset(e) {
@@ -246,6 +270,35 @@ export default function Login() {
               </label>
             )}
 
+            {mode === 'signup' && (
+              <>
+                <label className="checkbox-line">
+                  <input
+                    type="checkbox"
+                    checked={agreeTerms}
+                    onChange={(e) => setAgreeTerms(e.target.checked)}
+                    required
+                  />
+                  <span>
+                    I agree to the{' '}
+                    <a href="/terms" target="_blank">
+                      Terms and Conditions
+                    </a>
+                    .
+                  </span>
+                </label>
+
+                <label className="checkbox-line">
+                  <input
+                    type="checkbox"
+                    checked={emailOptIn}
+                    onChange={(e) => setEmailOptIn(e.target.checked)}
+                  />
+                  <span>Keep me updated on new features and tips.</span>
+                </label>
+              </>
+            )}
+
             <button
               className="btn auth-submit"
               type="submit"
@@ -284,6 +337,19 @@ export default function Login() {
           )}
         </div>
       </div>
+      <style jsx>{`
+        .checkbox-line {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 13px;
+          margin-top: 8px;
+        }
+        .checkbox-line a {
+          color: #2563eb;
+          text-decoration: none;
+        }
+      `}</style>
     </div>
   )
 }

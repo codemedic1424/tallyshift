@@ -8,7 +8,14 @@ import Head from 'next/head'
 import Script from 'next/script'
 import GlobalAnnouncementModal from '../ui/GlobalAnnouncementModal'
 
-const PUBLIC_ROUTES = ['/login', '/reset', '/reset-sent']
+const PUBLIC_ROUTES = [
+  '/login',
+  '/reset',
+  '/reset-sent',
+  '/terms',
+  '/privacy',
+  '/success',
+]
 
 function AuthGuard({ children }) {
   const router = useRouter()
