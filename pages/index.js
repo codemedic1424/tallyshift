@@ -110,16 +110,26 @@ export default function Home() {
       } else if (!data.walkthrough_seen) {
         setShowWalkthrough(true)
       }
-
-      // Load avatar if present
-      if (data.avatar_path) {
-        const { data: publicUrlData } = supabase.storage
-          .from('avatars')
-          .getPublicUrl(data.avatar_path)
-        setAvatarUrl(publicUrlData.publicUrl)
-      }
     })()
   }, [user?.id])
+
+  // ✅ Load avatar once profile is ready
+  useEffect(() => {
+    if (!profile?.avatar_path) return
+
+    const { data: publicUrlData } = supabase.storage
+      .from('avatars')
+      .getPublicUrl(profile.avatar_path)
+
+    if (publicUrlData?.publicUrl) {
+      setAvatarUrl(publicUrlData.publicUrl)
+    } else {
+      // fallback in case getPublicUrl fails
+      setAvatarUrl(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/avatars/${profile.avatar_path}`,
+      )
+    }
+  }, [profile?.avatar_path])
 
   async function loadStatsAndRecent() {
     setLoading(true)
@@ -214,6 +224,7 @@ export default function Home() {
               className="hero-avatar"
               width={72}
               height={72}
+              onError={() => setAvatarUrl(null)} // 👈 resets to fallback if broken
               onClick={() => router.push('/profile')}
             />
           ) : (

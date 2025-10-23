@@ -5,22 +5,30 @@ export default function Document() {
   return (
     <Html lang="en">
       <Head>
-        {/* Your existing PWA bits */}
+        {/* ---- PWA setup ---- */}
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#0ea5e9" />
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-        {/* iOS: run as standalone & control status bar */}
+
+        {/* ---- iOS & PWA meta ---- */}
         <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+
+        {/* ✅ Use white (or your app bg) so Dynamic Island area blends in */}
+        <meta name="theme-color" content="#ffffff" />
+
+        {/* Optional: ensure correct viewport */}
         <meta
           name="viewport"
-          content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+          content="width=device-width, initial-scale=1, viewport-fit=cover"
         />
       </Head>
-      <body>
+
+      <body style={{ backgroundColor: '#ffffff' }}>
         <Main />
         <NextScript />
-        {/* Register service worker */}
+
+        {/* ---- Register service worker ---- */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
