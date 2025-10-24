@@ -15,7 +15,7 @@ export default function ShiftDetailsModal({
   onDelete,
   currencyFormatter,
 }) {
-  const { settings } = useSettings()
+  const { settings, saveSettings } = useSettings()
 
   const trackDiscounts = !!settings?.track_discounts
   const tipoutEnabled = !!settings?.default_tipout_enabled
@@ -49,6 +49,11 @@ export default function ShiftDetailsModal({
   const [editDiscount, setEditDiscount] = useState('')
   const [selectedSections, setSelectedSections] = useState(shift.sections || [])
   const [showSectionsModal, setShowSectionsModal] = useState(false)
+  // --- Tags state (like Sections) ---
+  const [selectedTags, setSelectedTags] = useState(shift.tags || [])
+  const [showTagsModal, setShowTagsModal] = useState(false)
+  const [newTagName, setNewTagName] = useState('')
+  const [newTagColor, setNewTagColor] = useState('#c7d2fe')
 
   useEffect(() => {
     if (!shift) return
@@ -63,6 +68,7 @@ export default function ShiftDetailsModal({
     setJobId(shift.job_type_id || null)
     setEditDiscount(format(shift.discount_total))
     setSelectedSections(shift.sections || [])
+    setSelectedTags(Array.isArray(shift.tags) ? shift.tags : [])
   }, [shift, defaultLocationId])
 
   const format = (n) => (n == null ? '' : Number(n).toFixed(2))
@@ -79,20 +85,51 @@ export default function ShiftDetailsModal({
 
   async function handleSave() {
     setSaving(true)
-    await onSave({
-      date: editDate,
-      hours: Number(editHours || 0),
-      sales: Number(editSales || 0),
-      cash_tips: !tipsOnPaycheck && showCashInput ? Number(editCash || 0) : 0,
-      card_tips: !tipsOnPaycheck && showCardInput ? Number(editCard || 0) : 0,
-      tip_out_total: Number(editTipOut || 0),
-      notes: editNotes,
-      location_id: locationId || defaultLocationId,
-      job_type_id: jobId || null,
-      discount_total: trackDiscounts ? Number(editDiscount || 0) : 0,
-      sections: selectedSections,
-    }).finally(() => setSaving(false))
-    setEditMode(false)
+    try {
+      await onSave({
+        date: editDate,
+        hours: Number(editHours || 0),
+        sales: Number(editSales || 0),
+        cash_tips: !tipsOnPaycheck && showCashInput ? Number(editCash || 0) : 0,
+        card_tips: !tipsOnPaycheck && showCardInput ? Number(editCard || 0) : 0,
+        tip_out_total: Number(editTipOut || 0),
+        notes: editNotes,
+        location_id: locationId || defaultLocationId,
+        job_type_id: jobId || null,
+        discount_total: trackDiscounts ? Number(editDiscount || 0) : 0,
+        sections: selectedSections,
+        tags: (selectedTags || []).map((t) => ({
+          name: String(t.name || '').trim(),
+          color: t.color || '#3b82f6',
+        })),
+      })
+
+      // ✅ Append any newly created tags (by name) to profile settings
+      if (settings?.track_tags) {
+        const existingNames = new Set(
+          (settings?.tags || []).map((t) => (t.name || '').toLowerCase()),
+        )
+        const newOnes = (selectedTags || [])
+          .filter(
+            (t) => t?.name && !existingNames.has(String(t.name).toLowerCase()),
+          )
+          .map((t) => ({
+            name: String(t.name).trim(),
+            color: t.color || '#3b82f6',
+          }))
+
+        if (newOnes.length > 0) {
+          await saveSettings({
+            ...settings,
+            tags: [...(settings?.tags || []), ...newOnes],
+          })
+        }
+      }
+
+      setEditMode(false)
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (!shift) return null
@@ -236,6 +273,38 @@ export default function ShiftDetailsModal({
                     <b>{shift.sections.join(', ')}</b>
                   </div>
                 )}
+                {settings?.track_tags &&
+                  Array.isArray(shift.tags) &&
+                  shift.tags.length > 0 && (
+                    <div
+                      className="field-row"
+                      style={{ alignItems: 'flex-start' }}
+                    >
+                      <span style={{ paddingTop: 2 }}>Tags</span>
+                      <div
+                        style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}
+                      >
+                        {shift.tags.map((tag) => (
+                          <div
+                            key={tag.name}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              padding: '6px 10px',
+                              borderRadius: 999,
+                              background: tag.color || '#c7d2fe',
+                              border: '1px solid rgba(0,0,0,0.08)',
+                              color: '#1f2937',
+                              fontSize: 13,
+                            }}
+                          >
+                            <span>{tag.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                 {settings?.track_sales && (
                   <div className="field-row">
@@ -395,7 +464,8 @@ export default function ShiftDetailsModal({
                 </label>
               )}
               {/* Sections (Pro feature) */}
-              {settings?.track_sections && (
+              {/* Additional Info (Sections + Tags together, edit mode only) */}
+              {(settings?.track_sections || settings?.track_tags) && (
                 <div style={{ display: 'grid', gap: 12 }}>
                   <div
                     className="note"
@@ -413,38 +483,85 @@ export default function ShiftDetailsModal({
                   <div
                     style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
                   >
-                    {selectedSections.length > 0 && (
+                    {/* Sections chips (if enabled) */}
+                    {settings?.track_sections &&
+                      selectedSections.length > 0 && (
+                        <div
+                          style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}
+                        >
+                          {selectedSections.map((sec) => (
+                            <div
+                              key={sec}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 6,
+                                padding: '6px 10px',
+                                borderRadius: 999,
+                                border: '1px solid var(--border)',
+                                background: '#fff',
+                                fontSize: 13,
+                              }}
+                            >
+                              <span>{sec}</span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setSelectedSections((prev) =>
+                                    prev.filter((s) => s !== sec),
+                                  )
+                                }
+                                style={{
+                                  border: 'none',
+                                  background: 'transparent',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  color: '#6b7280',
+                                }}
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                    {/* Tags chips (if enabled) */}
+                    {settings?.track_tags && selectedTags.length > 0 && (
                       <div
                         style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}
                       >
-                        {selectedSections.map((sec) => (
+                        {selectedTags.map((tag) => (
                           <div
-                            key={sec}
+                            key={tag.name}
                             style={{
                               display: 'flex',
                               alignItems: 'center',
                               gap: 6,
                               padding: '6px 10px',
                               borderRadius: 999,
-                              border: '1px solid var(--border)',
-                              background: '#fff',
+                              background: tag.color,
+                              border: '1px solid rgba(0,0,0,0.08)',
+                              color: '#1f2937',
                               fontSize: 13,
                             }}
                           >
-                            <span>{sec}</span>
+                            <span>{tag.name}</span>
                             <button
                               type="button"
                               onClick={() =>
-                                setSelectedSections((prev) =>
-                                  prev.filter((s) => s !== sec),
+                                setSelectedTags((prev) =>
+                                  prev.filter((t) => t.name !== tag.name),
                                 )
                               }
                               style={{
                                 border: 'none',
                                 background: 'transparent',
-                                fontWeight: 700,
-                                cursor: 'pointer',
                                 color: '#6b7280',
+                                fontWeight: 700,
+                                borderRadius: 999,
+                                padding: '0 6px',
+                                cursor: 'pointer',
                               }}
                             >
                               ×
@@ -454,14 +571,27 @@ export default function ShiftDetailsModal({
                       </div>
                     )}
 
-                    <button
-                      className="btn btn-primary"
-                      type="button"
-                      onClick={() => setShowSectionsModal(true)}
-                      style={{ alignSelf: 'flex-start' }}
-                    >
-                      + Add Section(s)
-                    </button>
+                    {/* Buttons row: Sections & Tags side-by-side */}
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {settings?.track_sections && (
+                        <button
+                          className="btn btn-primary"
+                          type="button"
+                          onClick={() => setShowSectionsModal(true)}
+                        >
+                          + Add Section(s)
+                        </button>
+                      )}
+                      {settings?.track_tags && (
+                        <button
+                          className="btn btn-primary"
+                          type="button"
+                          onClick={() => setShowTagsModal(true)}
+                        >
+                          + Add Tag(s)
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -719,6 +849,157 @@ export default function ShiftDetailsModal({
           </div>
         )}
       </div>
+      {showTagsModal && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setShowTagsModal(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 20000,
+          }}
+        >
+          <div
+            className="modal-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 'min(420px, 90vw)',
+              borderRadius: 16,
+              background: '#fff',
+              padding: 20,
+              boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
+              display: 'grid',
+              gap: 16,
+            }}
+          >
+            <div style={{ fontWeight: 800, fontSize: 18 }}>Select Tags</div>
+
+            {/* Existing Tags from settings */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {(settings?.tags || []).map((tag) => {
+                const selected = selectedTags.some((t) => t.name === tag.name)
+                return (
+                  <div
+                    key={tag.name}
+                    onClick={() =>
+                      setSelectedTags((prev) =>
+                        selected
+                          ? prev.filter((t) => t.name !== tag.name)
+                          : [...prev, tag],
+                      )
+                    }
+                    style={{
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '6px 10px',
+                      borderRadius: 999,
+                      background: tag.color,
+                      border: selected
+                        ? '2px solid #111827'
+                        : '1px solid rgba(0,0,0,0.1)',
+                      color: '#1f2937',
+                      fontSize: 13,
+                    }}
+                  >
+                    <span>{tag.name}</span>
+                    {selected && <strong>✓</strong>}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Add a new tag */}
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6 }}>
+                Add New Tag
+              </div>
+              <input
+                className="input"
+                type="text"
+                placeholder="Tag name"
+                value={newTagName}
+                onChange={(e) => setNewTagName(e.target.value)}
+                style={{ marginBottom: 8 }}
+              />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {[
+                  '#fde68a',
+                  '#fbcfe8',
+                  '#a5f3fc',
+                  '#bbf7d0',
+                  '#c7d2fe',
+                  '#fca5a5',
+                  '#fdba74',
+                  '#f9a8d4',
+                  '#d9f99d',
+                ].map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => setNewTagColor(color)}
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 8,
+                      border:
+                        newTagColor === color
+                          ? '2px solid #111827'
+                          : '1px solid #d1d5db',
+                      background: color,
+                      cursor: 'pointer',
+                    }}
+                  />
+                ))}
+              </div>
+              <button
+                className="btn btn-primary"
+                type="button"
+                disabled={!newTagName.trim()}
+                onClick={() => {
+                  const name = newTagName.trim()
+                  if (!name) return
+                  const newTag = { name, color: newTagColor || '#c7d2fe' }
+                  setSelectedTags((prev) =>
+                    prev.some(
+                      (t) => t.name.toLowerCase() === name.toLowerCase(),
+                    )
+                      ? prev
+                      : [...prev, newTag],
+                  )
+                  setNewTagName('')
+                  setNewTagColor('#c7d2fe')
+                }}
+                style={{ marginTop: 8 }}
+              >
+                Add Tag
+              </button>
+            </div>
+
+            <div
+              style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}
+            >
+              <button
+                className="btn secondary"
+                onClick={() => setShowTagsModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => setShowTagsModal(false)}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style jsx>{`
         .modal-backdrop {

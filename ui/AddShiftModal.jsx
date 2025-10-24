@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useSettings } from '../lib/useSettings'
-import { MonitorDown } from 'lucide-react'
 
 // Local-safe YYYY-MM-DD from a Date
 function isoDate(d) {
@@ -26,7 +25,7 @@ export default function AddShiftModal({
   defaultTipoutPct, // number | null
   initialValues = {},
 }) {
-  const { settings } = useSettings()
+  const { settings, saveSettings } = useSettings()
 
   // ----- derive payout display from settings if props aren't provided -----
   const payoutMode = settings?.payout_mode ?? 'both'
@@ -45,9 +44,11 @@ export default function AddShiftModal({
   // derive tipout pct from prop OR settings
   const tipoutEnabled = !!settings?.default_tipout_enabled
   const defaultTipoutPctEff =
-    tipoutEnabled && typeof settings?.default_tipout_pct === 'number'
-      ? settings.default_tipout_pct
-      : null
+    typeof defaultTipoutPct === 'number'
+      ? defaultTipoutPct
+      : tipoutEnabled && typeof settings?.default_tipout_pct === 'number'
+        ? settings.default_tipout_pct
+        : null
 
   const [saving, setSaving] = useState(false)
 
@@ -61,10 +62,17 @@ export default function AddShiftModal({
   const [notes, setNotes] = useState('')
   const [selectedSections, setSelectedSections] = useState([])
   const [tipOutDirty, setTipOutDirty] = useState(false)
+  const [selectedTags, setSelectedTags] = useState([])
   const [discount, setDiscount] = useState('')
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
-  const isDirty = hours || sales || cash || card || tipOut || discount || notes
   const [showSectionsModal, setShowSectionsModal] = useState(false)
+  const [showTagsModal, setShowTagsModal] = useState(false)
+  const [newTagName, setNewTagName] = useState('')
+  const [newTagColor, setNewTagColor] = useState('#c7d2fe')
+  const isDirty =
+    !!(hours || sales || cash || card || tipOut || discount || notes) ||
+    selectedSections.length > 0 ||
+    selectedTags.length > 0
 
   // location / job selectors
   const multipleLocations = !!settings?.multiple_locations
@@ -142,7 +150,12 @@ export default function AddShiftModal({
       setLocationId(initialValues.location_id || defaultLocationId || null)
       setJobId(null)
       setDiscount('')
-      setSelectedSections([])
+      setSelectedSections(
+        Array.isArray(initialValues.sections) ? initialValues.sections : [],
+      )
+      setSelectedTags(
+        Array.isArray(initialValues.tags) ? initialValues.tags : [],
+      )
     } else {
       // default blank form if no prefill
       setDate(initialDate || isoDate(new Date()))
@@ -156,6 +169,7 @@ export default function AddShiftModal({
       setJobId(null)
       setDiscount('')
       setSelectedSections([])
+      setSelectedTags([])
     }
 
     setTipOutDirty(false)
@@ -273,14 +287,41 @@ export default function AddShiftModal({
       notes,
       location_id: currentLocation?.id || null,
       job_type_id: locationTracksJobs ? jobId || null : null,
-      sections: selectedSections,
       discount_total: settings?.track_discounts
         ? Number(formatCurrencyValue(discount) || 0)
         : 0,
       sections: settings?.track_sections ? selectedSections : [],
+      tags: selectedTags.map((t) => ({
+        name: String(t.name).trim(),
+        color: t.color || '#3b82f6',
+      })),
     }
     try {
       await onSave(payload)
+
+      if (settings?.track_tags && selectedTags.length > 0) {
+        const norm = (s) => String(s || '').trim()
+        const existing = Array.isArray(settings?.tags) ? settings.tags : []
+        const existingNames = new Set(
+          existing.map((t) => norm(t.name).toLowerCase()),
+        )
+        const toAddMap = new Map()
+
+        for (const t of selectedTags) {
+          const name = norm(t.name)
+          if (!name) continue
+          const key = name.toLowerCase()
+          if (!existingNames.has(key)) {
+            toAddMap.set(key, { name, color: t.color || '#3b82f6' })
+          }
+        }
+
+        const newOnes = Array.from(toAddMap.values())
+        if (newOnes.length > 0) {
+          await saveSettings({ ...settings, tags: [...existing, ...newOnes] })
+        }
+      }
+
       onClose?.()
     } finally {
       setSaving(false)
@@ -606,7 +647,7 @@ export default function AddShiftModal({
           )}
 
           {/* Additional Info */}
-          {settings?.track_sections && (
+          {(settings?.track_sections || settings?.track_tags) && (
             <div style={{ display: 'grid', gap: 12 }}>
               <div
                 className="note"
@@ -661,15 +702,67 @@ export default function AddShiftModal({
                     ))}
                   </div>
                 )}
+                {selectedTags.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {selectedTags.map((tag) => (
+                      <div
+                        key={tag.name}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          padding: '6px 10px',
+                          borderRadius: 999,
+                          background: tag.color,
+                          border: '1px solid rgba(0,0,0,0.08)',
+                          color: '#1f2937',
+                          fontSize: 13,
+                        }}
+                      >
+                        <span>{tag.name}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSelectedTags((prev) =>
+                              prev.filter((t) => t.name !== tag.name),
+                            )
+                          }
+                          style={{
+                            border: 'none',
+                            background: 'transparent',
+                            color: '#6b7280',
+                            fontWeight: 700,
+                            borderRadius: 999,
+                            padding: '0 6px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
-                <button
-                  className="btn btn-primary"
-                  type="button"
-                  onClick={() => setShowSectionsModal(true)}
-                  style={{ alignSelf: 'flex-start' }}
-                >
-                  + Add Section(s)
-                </button>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    className="btn btn-primary"
+                    type="button"
+                    onClick={() => setShowSectionsModal(true)}
+                  >
+                    + Add Section(s)
+                  </button>
+
+                  {settings?.track_tags && (
+                    <button
+                      className="btn btn-primary"
+                      type="button"
+                      onClick={() => setShowTagsModal(true)}
+                    >
+                      + Add Tag(s)
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -840,10 +933,7 @@ export default function AddShiftModal({
             <div style={{ fontWeight: 800, fontSize: 18 }}>Select Sections</div>
 
             <div style={{ display: 'grid', gap: 8 }}>
-              {(
-                settings?.locations.find((l) => l.id === locationId)
-                  ?.sections || []
-              )
+              {sectionsForLocation
                 .filter((s) => s.trim().length > 0)
                 .map((sec) => (
                   <label
@@ -878,6 +968,163 @@ export default function AddShiftModal({
               <button
                 className="btn btn-primary"
                 onClick={() => setShowSectionsModal(false)}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showTagsModal && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setShowTagsModal(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.45)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 20000,
+          }}
+        >
+          <div
+            className="modal-card"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: 'min(400px, 90vw)',
+              borderRadius: 16,
+              background: '#fff',
+              padding: 20,
+              boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
+              display: 'grid',
+              gap: 16,
+            }}
+          >
+            <div style={{ fontWeight: 800, fontSize: 18 }}>Select Tags</div>
+
+            {/* Existing Tags */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {(settings?.tags || []).map((tag) => {
+                const selected = selectedTags.some((t) => t.name === tag.name)
+                return (
+                  <div
+                    key={tag.name}
+                    onClick={() =>
+                      setSelectedTags((prev) =>
+                        selected
+                          ? prev.filter((t) => t.name !== tag.name)
+                          : [...prev, tag],
+                      )
+                    }
+                    style={{
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '6px 10px',
+                      borderRadius: 999,
+                      background: tag.color,
+                      border: selected
+                        ? '2px solid #111827'
+                        : '1px solid rgba(0,0,0,0.1)',
+                      color: '#1f2937',
+                      fontSize: 13,
+                    }}
+                  >
+                    <span>{tag.name}</span>
+                    {selected && <strong>✓</strong>}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* New Tag Input */}
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6 }}>
+                Add New Tag
+              </div>
+              <input
+                className="input"
+                type="text"
+                placeholder="Tag name"
+                value={newTagName}
+                onChange={(e) => setNewTagName(e.target.value)}
+                style={{ marginBottom: 8 }}
+              />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {[
+                  '#fde68a',
+                  '#fbcfe8',
+                  '#a5f3fc',
+                  '#bbf7d0',
+                  '#c7d2fe',
+                  '#fca5a5',
+                  '#fdba74',
+                  '#f9a8d4',
+                  '#d9f99d',
+                ].map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => setNewTagColor(color)}
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 8,
+                      border:
+                        newTagColor === color
+                          ? '2px solid #111827'
+                          : '1px solid #d1d5db',
+                      background: color,
+                      cursor: 'pointer',
+                    }}
+                  />
+                ))}
+              </div>
+
+              <button
+                className="btn btn-primary"
+                type="button"
+                disabled={!newTagName.trim()}
+                onClick={() => {
+                  const name = newTagName.trim()
+                  if (!name) return
+                  const newTag = { name, color: newTagColor }
+                  setSelectedTags((prev) => {
+                    const exists = prev.some(
+                      (t) => t.name.toLowerCase() === name.toLowerCase(),
+                    )
+                    return exists ? prev : [...prev, newTag]
+                  })
+
+                  setNewTagName('')
+                  setNewTagColor('#c7d2fe')
+                }}
+                style={{ marginTop: 8 }}
+              >
+                Add Tag
+              </button>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: 8,
+                marginTop: 8,
+              }}
+            >
+              <button
+                className="btn secondary"
+                onClick={() => setShowTagsModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => setShowTagsModal(false)}
               >
                 Save
               </button>
