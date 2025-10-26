@@ -9,10 +9,18 @@ import SwiftUI
 
 @main
 struct TallyShiftApp: App {
+    @StateObject private var authViewModel = AuthViewModel()
+    
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environmentObject(AuthViewModel())
+            NavigationStack {
+                if authViewModel.isAuthenticated {
+                    DashboardView()
+                } else {
+                    SignInView()
+                }
+            }
+            .environmentObject(authViewModel)
         }
     }
 }
