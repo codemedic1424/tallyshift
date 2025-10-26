@@ -14,3 +14,7 @@ struct AnalyticsView: View {
             .foregroundStyle(.secondary)
     }
 }
+
+#Preview {
+    AnalyticsView()
+}
