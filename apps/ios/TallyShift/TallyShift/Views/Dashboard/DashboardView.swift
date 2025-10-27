@@ -11,7 +11,7 @@ struct DashboardView: View {
     var body: some View {
         List {
             Section("QA Modules") {
-                NavigationLink("📊 QA Analytics", destination: AnalyticsView())
+                NavigationLink("📊 Analytics", destination: AnalyticsView())
                 NavigationLink("🧾 Reports", destination: ReportsView())
                 NavigationLink("⚙️ Settings", destination: SettingsView())
             }
@@ -19,3 +19,8 @@ struct DashboardView: View {
         .navigationTitle("Dashboard")
     }
 }
+
+#Preview {
+    NavigationStack { DashboardView() }
+}
+ 

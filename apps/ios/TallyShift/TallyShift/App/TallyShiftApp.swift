@@ -17,7 +17,7 @@ struct TallyShiftApp: App {
                 if authViewModel.isAuthenticated {
                     DashboardView()
                 } else {
-                    SignInView()
+                    SignInView2()
                 }
             }
             .environmentObject(authViewModel)

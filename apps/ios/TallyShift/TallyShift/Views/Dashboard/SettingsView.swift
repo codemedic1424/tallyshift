@@ -9,8 +9,17 @@ import SwiftUI
 
 struct SettingsView: View {
     var body: some View {
-        Text("📈 Settings Placeholder")
-            .font(.title)
-            .foregroundStyle(.secondary)
+        Form {
+            Section("Account") {
+                Text("Signed in as: placeholder@example.com")
+            }
+            Section("App") {
+                Toggle("Use Demo Data", isOn: .constant(true))
+            }
+        }
+        .navigationTitle("Settings")
     }
 }
+
+#Preview { SettingsView() }
+ 

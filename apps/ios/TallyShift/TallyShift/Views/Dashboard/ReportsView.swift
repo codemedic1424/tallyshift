@@ -9,8 +9,12 @@ import SwiftUI
 
 struct ReportsView: View {
     var body: some View {
-        Text("📈 Reports Placeholder")
+        Text("🧾 Reports Placeholder")
             .font(.title)
             .foregroundStyle(.secondary)
+            .padding()
     }
 }
+
+#Preview { ReportsView() }
+ 

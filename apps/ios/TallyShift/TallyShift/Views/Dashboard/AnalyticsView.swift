@@ -12,9 +12,9 @@ struct AnalyticsView: View {
         Text("📈 Analytics Placeholder")
             .font(.title)
             .foregroundStyle(.secondary)
+            .padding()
     }
 }
 
-#Preview {
-    AnalyticsView()
-}
+#Preview { AnalyticsView() }
+ 

@@ -12,24 +12,42 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if auth.isSignedIn {
+            if auth.isAuthenticated {
                 VStack {
                     Image(systemName: "globe")
                         .imageScale(.large)
                         .foregroundStyle(.tint)
                     Text("Hello, world!")
-                    Button("Sign Out") { auth.signOut() }
+                    Button("Sign Out") { auth.isAuthenticated = false }
                         .padding(.top)
                 }
                 .padding()
             } else {
-                SignInScreen()
+                SignInView2()
             }
         }
-        .animation(.default, value: auth.isSignedIn)
+        .animation(.default, value: auth.isAuthenticated)
     }
 }
 
-#Preview {
-    ContentView()
+#Preview("Signed Out") {
+    NavigationStack {
+        ContentView()
+            .environmentObject({
+                let vm = AuthViewModel()
+                vm.isAuthenticated = false
+                return vm
+            }())
+    }
+}
+
+#Preview("Signed In") {
+    NavigationStack {
+        ContentView()
+            .environmentObject({
+                let vm = AuthViewModel()
+                vm.isAuthenticated = true
+                return vm
+            }())
+    }
 }
