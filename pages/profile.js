@@ -1,6 +1,7 @@
 // pages/profile.js
 import { useEffect, useRef, useState } from 'react'
 import { Settings } from 'lucide-react'
+import { useRouter } from 'next/router'
 import { supabase } from '../lib/supabase'
 import { useUser } from '../lib/useUser'
 import HeaderBar from '../ui/HeaderBar'
@@ -37,7 +38,7 @@ export function UpgradeButton() {
 
 export default function Profile() {
   const { user } = useUser()
-
+  const router = useRouter()
   // pro features
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
 
@@ -98,6 +99,15 @@ export default function Profile() {
   const [planTier, setplanTier] = useState('free')
   // 🎉 Upgrade animation state
   const [showUpgradeAnimation, setShowUpgradeAnimation] = useState(false)
+
+  useEffect(() => {
+    const q = router.query?.open || router.query?.show
+    if (q === 'settings') {
+      setSettingsOpen(true)
+      // optional: remove the query so refresh doesn’t reopen it
+      router.replace('/profile', undefined, { shallow: true })
+    }
+  }, [router.query?.open, router.query?.show])
 
   useEffect(() => {
     const shouldAnimate = localStorage.getItem(

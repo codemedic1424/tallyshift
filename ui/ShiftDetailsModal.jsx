@@ -16,6 +16,17 @@ export default function ShiftDetailsModal({
   currencyFormatter,
 }) {
   const { settings, saveSettings } = useSettings()
+  const normKey = (s) =>
+    String(s || '')
+      .trim()
+      .toLowerCase()
+  const toTagObj = (x, def = '#c7d2fe') => {
+    if (!x) return null
+    if (typeof x === 'string') return { name: x.trim(), color: def }
+    const name = String(x.name ?? x.label ?? '').trim()
+    const color = x.color || def
+    return name ? { name, color } : null
+  }
 
   const trackDiscounts = !!settings?.track_discounts
   const tipoutEnabled = !!settings?.default_tipout_enabled
@@ -54,6 +65,20 @@ export default function ShiftDetailsModal({
   const [showTagsModal, setShowTagsModal] = useState(false)
   const [newTagName, setNewTagName] = useState('')
   const [newTagColor, setNewTagColor] = useState('#c7d2fe')
+  const availableTags = useMemo(() => {
+    const fromSettings = (settings?.tags || [])
+      .map((t) => toTagObj(t))
+      .filter(Boolean)
+
+    const fromSelectedOnlyNew = (selectedTags || [])
+      .map((t) => toTagObj(t))
+      .filter(Boolean)
+      .filter(
+        (t) => !fromSettings.some((s) => normKey(s.name) === normKey(t.name)),
+      )
+
+    return [...fromSettings, ...fromSelectedOnlyNew]
+  }, [settings?.tags, selectedTags])
 
   useEffect(() => {
     if (!shift) return
@@ -68,7 +93,8 @@ export default function ShiftDetailsModal({
     setJobId(shift.job_type_id || null)
     setEditDiscount(format(shift.discount_total))
     setSelectedSections(shift.sections || [])
-    setSelectedTags(Array.isArray(shift.tags) ? shift.tags : [])
+    const initialTags = Array.isArray(shift.tags) ? shift.tags : []
+    setSelectedTags(initialTags.map((t) => toTagObj(t)).filter(Boolean))
   }, [shift, defaultLocationId])
 
   const format = (n) => (n == null ? '' : Number(n).toFixed(2))
@@ -878,19 +904,26 @@ export default function ShiftDetailsModal({
           >
             <div style={{ fontWeight: 800, fontSize: 18 }}>Select Tags</div>
 
-            {/* Existing Tags from settings */}
+            {/* Existing Tags (settings ∪ newly added) */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {(settings?.tags || []).map((tag) => {
-                const selected = selectedTags.some((t) => t.name === tag.name)
+              {availableTags.map((tag) => {
+                const key = normKey(tag.name)
+                const isSelected = (selectedTags || [])
+                  .map((t) => toTagObj(t))
+                  .some((t) => normKey(t.name) === key)
+
                 return (
                   <div
-                    key={tag.name}
+                    key={key}
                     onClick={() =>
-                      setSelectedTags((prev) =>
-                        selected
-                          ? prev.filter((t) => t.name !== tag.name)
-                          : [...prev, tag],
-                      )
+                      setSelectedTags((prev) => {
+                        const cur = (prev || [])
+                          .map((t) => toTagObj(t))
+                          .filter(Boolean)
+                        return isSelected
+                          ? cur.filter((t) => normKey(t.name) !== key)
+                          : [...cur, toTagObj(tag)]
+                      })
                     }
                     style={{
                       cursor: 'pointer',
@@ -900,7 +933,7 @@ export default function ShiftDetailsModal({
                       padding: '6px 10px',
                       borderRadius: 999,
                       background: tag.color,
-                      border: selected
+                      border: isSelected
                         ? '2px solid #111827'
                         : '1px solid rgba(0,0,0,0.1)',
                       color: '#1f2937',
@@ -908,7 +941,7 @@ export default function ShiftDetailsModal({
                     }}
                   >
                     <span>{tag.name}</span>
-                    {selected && <strong>✓</strong>}
+                    {isSelected && <strong>✓</strong>}
                   </div>
                 )
               })}
@@ -965,13 +998,16 @@ export default function ShiftDetailsModal({
                   const name = newTagName.trim()
                   if (!name) return
                   const newTag = { name, color: newTagColor || '#c7d2fe' }
-                  setSelectedTags((prev) =>
-                    prev.some(
-                      (t) => t.name.toLowerCase() === name.toLowerCase(),
-                    )
-                      ? prev
-                      : [...prev, newTag],
-                  )
+
+                  setSelectedTags((prev) => {
+                    const cur = (prev || [])
+                      .map((t) => toTagObj(t))
+                      .filter(Boolean)
+                    if (cur.some((t) => normKey(t.name) === normKey(name)))
+                      return cur
+                    return [...cur, newTag] // ✅ shows up immediately and is selected
+                  })
+
                   setNewTagName('')
                   setNewTagColor('#c7d2fe')
                 }}

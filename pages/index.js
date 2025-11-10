@@ -11,6 +11,42 @@ import TabBar from '../ui/TabBar'
 import FAB from '../ui/FAB'
 import ProfileCompletionModal from '../ui/ProfileCompletionModal'
 import WalkthroughModal from '../ui/WalkthroughModal'
+import RecentShiftCard from '../ui/RecentShiftCard'
+import UpgradeModal from '../ui/UpgradeModal'
+import NextShiftStrip from '../ui/NextShiftStrip'
+import AddShiftModal from '../ui/AddShiftModal'
+
+function isLikelyIcsUrl(u) {
+  if (!u || typeof u !== 'string') return false
+  const s = u.trim()
+  return (
+    s.length > 8 &&
+    (s.toLowerCase().endsWith('.ics') || /^https?:\/\//i.test(s))
+  )
+}
+
+function dateKeyLocal(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function extractIcsUrlsFromSettings(settings) {
+  const urls = new Set()
+
+  // Per-location (your actual structure)
+  const locs = Array.isArray(settings?.locations) ? settings.locations : []
+  for (const l of locs) {
+    const enabled = !!l?.calendar_sync_enabled
+    const url = l?.calendar_feed_url
+    if (enabled && isLikelyIcsUrl(url)) {
+      urls.add(String(url).trim())
+    }
+  }
+
+  return Array.from(urls)
+}
 
 function parseDateOnlyLocal(s) {
   if (!s) return new Date(NaN)
@@ -56,6 +92,15 @@ export default function Home() {
   const [avatarUrl, setAvatarUrl] = useState(null)
   const [showNameModal, setShowNameModal] = useState(false)
   const [showWalkthrough, setShowWalkthrough] = useState(false)
+  const [latest, setLatest] = useState(null)
+  const [showUpgrade, setShowUpgrade] = useState(false)
+  const [nextShift, setNextShift] = useState(null)
+  const [hideNextShiftCard, setHideNextShiftCard] = useState(false) // persistent dismiss
+  const [isPro, setIsPro] = useState(false)
+  const [hasCalSync, setHasCalSync] = useState(false)
+  const [addOpen, setAddOpen] = useState(false)
+  const [addDate, setAddDate] = useState(null)
+  const [prefillShift, setPrefillShift] = useState(null)
 
   const currencyCode = settings?.currency || 'USD'
   const currencyFormatter = useMemo(
@@ -69,6 +114,12 @@ export default function Home() {
     [currencyCode],
   )
 
+  useEffect(() => {
+    if (!settings) return
+    const urls = extractIcsUrlsFromSettings(settings)
+    setHasCalSync(urls.length > 0)
+  }, [settings])
+
   // Load profile info
   // Load or create profile and trigger onboarding
   useEffect(() => {
@@ -77,7 +128,7 @@ export default function Home() {
       const { data, error } = await supabase
         .from('profiles')
         .select(
-          'first_name,last_name,avatar_path,first_time_complete,walkthrough_seen',
+          'first_name,last_name,avatar_path,first_time_complete,walkthrough_seen,plan_tier',
         )
         .eq('id', user.id)
         .maybeSingle() // returns null if no row
@@ -103,6 +154,9 @@ export default function Home() {
 
       // 🧭 Existing profile
       setProfile(data)
+      setIsPro(
+        ['pro', 'founder'].includes((data?.plan_tier || '').toLowerCase()),
+      )
 
       // ✅ Trigger onboarding modals based on flags
       if (!data.first_time_complete) {
@@ -112,6 +166,25 @@ export default function Home() {
       }
     })()
   }, [user?.id])
+  useEffect(() => {
+    const v = localStorage.getItem('hide_next_shift_card')
+    setHideNextShiftCard(v === '1')
+  }, [])
+  useEffect(() => {
+    // If user turns calendar sync ON, always show the strip again
+    if (hasCalSync && hideNextShiftCard) {
+      localStorage.removeItem('hide_next_shift_card')
+      setHideNextShiftCard(false)
+    }
+  }, [hasCalSync, hideNextShiftCard])
+
+  const dismissNextShift = () => {
+    // Only allow dismissal when calendar sync is OFF
+    if (!hasCalSync) {
+      localStorage.setItem('hide_next_shift_card', '1')
+      setHideNextShiftCard(true)
+    }
+  }
 
   // ✅ Load avatar once profile is ready
   useEffect(() => {
@@ -169,7 +242,144 @@ export default function Home() {
     setStats({ net, hours, eff })
     setRecent(last5 || [])
     setLoading(false)
+
+    setStats({ net, hours, eff })
+    setRecent(last5 || [])
+    setLatest(last5?.[0] || null) // ← add this line
+    setLoading(false)
   }
+  async function loadNextShift() {
+    if (!hasCalSync || !user) {
+      setNextShift(null)
+      return
+    }
+
+    function openAddFromNextShift(ns) {
+      const start = ns.start_ts ? new Date(ns.start_ts) : null
+      const end = ns.end_ts ? new Date(ns.end_ts) : null
+      const hours =
+        start && end ? (end.getTime() - start.getTime()) / 3600000 : ''
+
+      const isoDate = start ? dateKeyLocal(start) : dateKeyLocal(new Date())
+
+      setPrefillShift({
+        date: isoDate, // 'YYYY-MM-DD'
+        hours: hours || '',
+        location_id: ns.location_id || '',
+        location_name: ns.location_name || '',
+        notes: ns.title || '',
+        summary: ns.title || '',
+        original_calendar_id: ns.id || null, // for deletion after save
+        original_calendar_external_id: ns.external_id, // prevents re-import
+      })
+
+      setAddDate(isoDate)
+      setAddOpen(true)
+    }
+
+    // resolve location name from settings.locations
+    const locName = (locId) => {
+      const loc = (settings?.locations || []).find((l) => l.id === locId)
+      return loc?.name || ''
+    }
+
+    try {
+      const nowIso = new Date().toISOString() // e.g. "2025-11-09T22:55:00.000Z"
+      const today = new Date().toISOString().slice(0, 10) // "YYYY-MM-DD"
+
+      const { data, error } = await supabase
+        .from('calendar_shifts')
+        .select(
+          'id, summary, start_time, end_time, location_id, is_all_day, date, external_id',
+        )
+        .eq('user_id', user.id)
+        .or(
+          [
+            // starts in the future
+            `start_time.gte.${nowIso}`,
+            // currently in progress (start <= now < end)
+            `and(start_time.lte.${nowIso},end_time.gt.${nowIso})`,
+            // all-day events today or later
+            `and(is_all_day.eq.true,date.gte.${today})`,
+          ].join(','),
+        )
+        // Prefer timed events first, then all-day by date
+        .order('start_time', { ascending: true, nullsFirst: false })
+        .order('date', { ascending: true, nullsFirst: false })
+        .limit(1)
+
+      if (error) throw error
+
+      const ev = data?.[0]
+      if (!ev) return setNextShift(null)
+
+      setNextShift({
+        id: ev.id,
+        title: ev.summary || 'Scheduled shift',
+        start_ts: ev.start_time || (ev.date ? `${ev.date}T00:00:00Z` : null),
+        end_ts: ev.end_time || null,
+        location_id: ev.location_id || null,
+        location_name: locName(ev.location_id),
+        external_id: ev.external_id || null,
+      })
+    } catch (e) {
+      console.error('loadNextShift failed:', e)
+      setNextShift(null)
+    }
+  }
+  async function handleAddSave(payload) {
+    if (!user) return alert('Sign in first')
+
+    const originalCalendarId = prefillShift?.original_calendar_id || null
+
+    const dbRow = {
+      user_id: user.id,
+      ...payload,
+    }
+
+    // Maintain linkage so the same calendar event won’t be re-imported
+    if (prefillShift?.original_calendar_external_id) {
+      dbRow.imported_from_calendar_id =
+        prefillShift.original_calendar_external_id
+    } else if (prefillShift?.original_calendar_id) {
+      dbRow.imported_from_calendar_id = prefillShift.original_calendar_id
+    }
+
+    const { data, error } = await supabase
+      .from('shifts')
+      .insert(dbRow)
+      .select('*')
+      .single()
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    // If created from an upcoming calendar entry, delete that row
+    if (originalCalendarId) {
+      const { error: delErr } = await supabase
+        .from('calendar_shifts')
+        .delete()
+        .eq('id', originalCalendarId)
+        .eq('user_id', user.id)
+
+      if (delErr)
+        console.error('Error deleting imported calendar shift:', delErr)
+    }
+
+    // Close modal & refresh UI bits
+    setPrefillShift(null)
+    setAddOpen(false)
+    if (hasCalSync) loadNextShift()
+    loadStatsAndRecent()
+  }
+
+  useEffect(() => {
+    if (!user) return
+    // Only try to load upcoming events if calendar is connected
+    if (hasCalSync) loadNextShift()
+  }, [user?.id, hasCalSync])
 
   useEffect(() => {
     if (user) loadStatsAndRecent()
@@ -187,6 +397,28 @@ export default function Home() {
       '0',
     )}-${String(today.getDate()).padStart(2, '0')}`
     router.push(`/calendar?d=${iso}&add=1`)
+  }
+  function openAddFromNextShift(ns) {
+    const start = ns.start_ts ? new Date(ns.start_ts) : null
+    const end = ns.end_ts ? new Date(ns.end_ts) : null
+    const hours =
+      start && end ? (end.getTime() - start.getTime()) / 3600000 : ''
+
+    const isoDate = start ? dateKeyLocal(start) : dateKeyLocal(new Date())
+
+    setPrefillShift({
+      date: isoDate,
+      hours: hours || '',
+      location_id: ns.location_id || '',
+      location_name: ns.location_name || '',
+      notes: ns.title || '',
+      summary: ns.title || '',
+      original_calendar_id: ns.id || null,
+      original_calendar_external_id: ns.external_id || null,
+    })
+
+    setAddDate(isoDate)
+    setAddOpen(true)
   }
 
   if (userLoading) {
@@ -239,6 +471,19 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Next Shift / Calendar CTA (dismissible) */}
+      {!hideNextShiftCard && (
+        <NextShiftStrip
+          nextShift={nextShift}
+          isPro={isPro}
+          hasCalendarSync={hasCalSync}
+          onUpgrade={() => setShowUpgrade(true)}
+          onDismiss={dismissNextShift}
+          canDismiss={!hasCalSync}
+          onAdd={openAddFromNextShift}
+        />
+      )}
+
       <div className="container" style={{ display: 'grid', gap: 16 }}>
         {/* Performance Summary */}
         <div className="card perf-card">
@@ -270,64 +515,19 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Recent Shifts */}
+        {/* Most Recent Shift (replaces Recent Shifts) */}
         <div className="card">
-          <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
-            Recent Shifts
-          </div>
           {loading ? (
             <div className="note">Loading…</div>
-          ) : recent.length === 0 ? (
+          ) : latest ? (
+            <RecentShiftCard
+              shift={latest}
+              currencyFormatter={currencyFormatter}
+            />
+          ) : (
             <div className="note">
               No shifts yet. Click the blue “+” button to add your first one!
             </div>
-          ) : (
-            recent.map((r) => {
-              const net =
-                Number(r.cash_tips || 0) +
-                Number(r.card_tips || 0) -
-                Number(r.tip_out_total || 0)
-              const eff = Number(r.hours || 0) > 0 ? net / Number(r.hours) : 0
-              return (
-                <div
-                  key={r.id}
-                  className="card home-row"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setSelectedShift(r)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <div className="home-row-left">
-                    <div className="home-row-date">
-                      {parseDateOnlyLocal(r.date).toLocaleDateString()}
-                    </div>
-                    {r.notes && (
-                      <div
-                        className="note"
-                        style={{
-                          marginTop: 2,
-                          maxWidth: 260,
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
-                      >
-                        {r.notes}
-                      </div>
-                    )}
-                  </div>
-                  <div className="home-row-right">
-                    <div className="home-row-amt">
-                      {currencyFormatter.format(net)}
-                    </div>
-                    <div className="note">
-                      {Number(r.hours || 0).toFixed(2)}h ·{' '}
-                      {currencyFormatter.format(eff)}/h
-                    </div>
-                  </div>
-                </div>
-              )
-            })
           )}
         </div>
       </div>
@@ -422,6 +622,20 @@ export default function Home() {
           }}
         />
       )}
+      {addOpen && (
+        <AddShiftModal
+          open={true}
+          initialDate={addDate}
+          initialValues={prefillShift || {}}
+          onClose={() => {
+            setAddOpen(false)
+            setPrefillShift(null)
+          }}
+          onSave={handleAddSave}
+        />
+      )}
+
+      {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} />}
 
       {showWalkthrough && (
         <WalkthroughModal

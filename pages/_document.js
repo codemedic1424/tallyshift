@@ -5,19 +5,38 @@ export default function Document() {
   return (
     <Html lang="en">
       <Head>
-        {/* ---- PWA setup ---- */}
-        <link rel="manifest" href="/manifest.json" />
-        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-
-        {/* ---- iOS & PWA meta ---- */}
-        <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-
-        {/* ✅ Use white (or your app bg) so Dynamic Island area blends in */}
+        {/* ---- PWA & Manifest ---- */}
+        <link rel="manifest" href="/manifest.webmanifest" />
         <meta name="theme-color" content="#ffffff" />
 
-        {/* Optional: ensure correct viewport */}
+        {/* ---- iOS Home Screen Icons ---- */}
+        <link
+          rel="apple-touch-icon"
+          sizes="180x180"
+          href="/apple-touch-icon-180.png"
+        />
+        <link
+          rel="apple-touch-icon"
+          sizes="167x167"
+          href="/apple-touch-icon-167.png"
+        />
+        <link
+          rel="apple-touch-icon"
+          sizes="152x152"
+          href="/apple-touch-icon-152.png"
+        />
+        <link
+          rel="apple-touch-icon"
+          sizes="120x120"
+          href="/apple-touch-icon-120.png"
+        />
+
+        {/* ---- iOS Web App Settings ---- */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="TallyShift" />
+
+        {/* ---- Optional Viewport (you can move to _app.js if already set) ---- */}
         <meta
           name="viewport"
           content="width=device-width, initial-scale=1, viewport-fit=cover"
@@ -27,19 +46,6 @@ export default function Document() {
       <body style={{ backgroundColor: '#ffffff' }}>
         <Main />
         <NextScript />
-
-        {/* ---- Register service worker ---- */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-                window.addEventListener('load', () => {
-                  navigator.serviceWorker.register('/sw.js');
-                });
-              }
-            `,
-          }}
-        />
       </body>
     </Html>
   )

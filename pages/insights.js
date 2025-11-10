@@ -294,6 +294,39 @@ export default function Insights() {
     const pEnd = new Date(lastYear, end.getMonth(), end.getDate())
     return { start, end, pStart, pEnd }
   }
+  // ---- tag utils ----
+  // Accepts: array of strings/objects, JSON stringified array, or CSV string
+  function getTagList(val) {
+    if (!val) return []
+
+    const toName = (x) =>
+      typeof x === 'object' && x !== null
+        ? String(x.name ?? x.label ?? x.title ?? '').trim()
+        : String(x ?? '').trim()
+
+    if (Array.isArray(val)) return val.map(toName).filter(Boolean)
+
+    if (typeof val === 'string') {
+      // Try JSON array first
+      try {
+        const parsed = JSON.parse(val)
+        if (Array.isArray(parsed)) return parsed.map(toName).filter(Boolean)
+      } catch {}
+      // Fallback CSV
+      return val
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    }
+
+    return []
+  }
+
+  // Normalize keys so colors match regardless of case/spacing
+  const normTagKey = (s) =>
+    String(s || '')
+      .trim()
+      .toLowerCase()
 
   async function fetchRange(tf) {
     if (!user) return
@@ -1179,6 +1212,189 @@ export default function Insights() {
                                       Tip{' '}
                                       {s.avgTipPct != null
                                         ? `${s.avgTipPct.toFixed(1)}%`
+                                        : '—'}
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })()
+              )}
+            </div>
+          )}
+        {/* Tag Breakdown — grouped by Location (fixed keys + colors + no [object Object]) */}
+        {(user?.plan_tier === 'pro' || user?.plan_tier === 'founder') &&
+          settings?.track_tags && (
+            <div className="card">
+              <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
+                Tag breakdown ({tfLabel})
+              </div>
+
+              {rows.every((r) => getTagList(r.tags).length === 0) ? (
+                <div className="note">
+                  No tag data found for this range yet.
+                </div>
+              ) : (
+                (() => {
+                  // Location lookup (id -> name)
+                  const locMap = {}
+                  if (Array.isArray(settings?.locations)) {
+                    for (const loc of settings.locations) {
+                      locMap[loc.id] = loc.name || 'Unknown location'
+                    }
+                  }
+
+                  // Tag metadata (normalized key -> {color,label})
+                  const tagMeta = {}
+                  if (Array.isArray(settings?.tags)) {
+                    for (const t of settings.tags) {
+                      const key = normTagKey(t?.name)
+                      if (key)
+                        tagMeta[key] = {
+                          color: t?.color || null,
+                          label: t?.name || '',
+                        }
+                    }
+                  }
+
+                  // Aggregate by location -> tagKey
+                  const agg = {}
+                  for (const r of rows) {
+                    const locId = r.location_id || 'unknown'
+                    const locName = locMap[locId] || 'Unknown location'
+                    const tagNames = getTagList(r.tags)
+                    if (!tagNames.length) continue
+
+                    const net =
+                      Number(r.cash_tips || 0) +
+                      Number(r.card_tips || 0) -
+                      Number(r.tip_out_total || 0)
+                    const sales = Number(r.sales || 0)
+
+                    if (!agg[locId]) agg[locId] = { locName, tags: {} }
+
+                    for (const name of tagNames) {
+                      const key = normTagKey(name)
+                      if (!key) continue
+                      if (!agg[locId].tags[key]) {
+                        agg[locId].tags[key] = {
+                          label: name,
+                          count: 0,
+                          sumNet: 0,
+                          sumSales: 0,
+                        }
+                      }
+                      agg[locId].tags[key].count++
+                      agg[locId].tags[key].sumNet += net
+                      agg[locId].tags[key].sumSales += sales
+                    }
+                  }
+
+                  const locations = Object.values(agg)
+                  if (locations.length === 0) {
+                    return <div className="note">No tag data available.</div>
+                  }
+
+                  return (
+                    <div style={{ display: 'grid', gap: 18 }}>
+                      {locations.map((loc) => {
+                        const entries = Object.entries(loc.tags)
+                          .map(([key, s]) => ({
+                            key,
+                            label: s.label,
+                            count: s.count,
+                            avgNet: s.sumNet / s.count || 0,
+                            avgTipPct:
+                              s.sumSales > 0
+                                ? (s.sumNet / s.sumSales) * 100
+                                : null,
+                          }))
+                          .sort(
+                            (a, b) => (b.avgTipPct || 0) - (a.avgTipPct || 0),
+                          )
+
+                        const topTipPct =
+                          entries.length > 0 && entries[0].avgTipPct != null
+                            ? entries[0].avgTipPct
+                            : null
+
+                        return (
+                          <div
+                            key={loc.locName}
+                            style={{ display: 'grid', gap: 8 }}
+                          >
+                            <div
+                              style={{
+                                fontWeight: 700,
+                                fontSize: 15,
+                                borderBottom: '1px solid #eee',
+                                paddingBottom: 4,
+                              }}
+                            >
+                              {loc.locName}
+                            </div>
+
+                            <div style={{ display: 'grid', gap: 6 }}>
+                              {entries.map((t) => {
+                                const meta = tagMeta[t.key] || {}
+                                const display = meta.label || t.label || t.key
+                                const isTop =
+                                  topTipPct != null && t.avgTipPct === topTipPct
+                                return (
+                                  <div
+                                    key={t.key}
+                                    style={{
+                                      display: 'grid',
+                                      gridTemplateColumns: '1fr auto auto auto',
+                                      alignItems: 'center',
+                                      gap: 8,
+                                    }}
+                                  >
+                                    <div
+                                      className="note"
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                      }}
+                                    >
+                                      <span
+                                        style={{
+                                          display: 'inline-block',
+                                          width: 10,
+                                          height: 10,
+                                          borderRadius: '50%',
+                                          background: meta.color || '#d1d5db',
+                                          marginRight: 8,
+                                        }}
+                                      />
+                                      {display}
+                                    </div>
+                                    <div className="note">{t.count} shifts</div>
+                                    <div className="note">
+                                      {currencyFormatter.format(t.avgNet)} avg
+                                    </div>
+                                    <div
+                                      className="tip-pill"
+                                      style={{
+                                        padding: '3px 10px',
+                                        borderRadius: '999px',
+                                        fontSize: 13,
+                                        fontWeight: 600,
+                                        background: isTop
+                                          ? 'rgba(34,197,94,0.12)'
+                                          : 'rgba(107,114,128,0.12)',
+                                        color: isTop ? '#16a34a' : '#374151',
+                                        whiteSpace: 'nowrap',
+                                      }}
+                                    >
+                                      Tip{' '}
+                                      {t.avgTipPct != null
+                                        ? `${t.avgTipPct.toFixed(1)}%`
                                         : '—'}
                                     </div>
                                   </div>
