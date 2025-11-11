@@ -4,7 +4,6 @@ import { useRouter } from 'next/router'
 import { supabase } from '../lib/supabase'
 import { useUser } from '../lib/useUser'
 import HeaderBar from '../ui/HeaderBar'
-import TabBar from '../ui/TabBar'
 
 export default function Login() {
   const { user } = useUser()
@@ -21,53 +20,29 @@ export default function Login() {
   const [msg, setMsg] = useState(null)
 
   const emailRef = useRef(null)
-  // Add new state hooks near the top
   const [agreeTerms, setAgreeTerms] = useState(false)
   const [emailOptIn, setEmailOptIn] = useState(false)
 
-  // inside onSignUp()
-  async function onSignUp(e) {
-    e.preventDefault()
-    setErr(null)
-    setMsg(null)
-    if (!emailOk) return setErr('Enter a valid email.')
-    if (!pwValid) return setErr('Password doesn’t meet the requirements.')
-    if (!matchOK) return setErr('Passwords do not match.')
-    if (!agreeTerms)
-      return setErr('You must agree to the Terms and Conditions to continue.')
-
-    setLoading(true)
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { email_opt_in: emailOptIn }, // ✅ this saves the opt-in flag in user_metadata
-      },
-    })
-    setLoading(false)
-
-    if (error) setErr(error.message)
-    else {
-      // ✅ store email_opt_in in your profiles table
-      const userId = data?.user?.id
-      if (userId) {
-        await supabase
-          .from('profiles')
-          .update({ email_opt_in: emailOptIn })
-          .eq('id', userId)
-      }
-
-      setMsg(
-        'Account created! Check your email for the confirmation link to login.',
-      )
-    }
-  }
+  const emailOk = /^\S+@\S+\.\S+$/.test(email)
+  const pwLenOK = password.length >= 8
+  const pwUpperOK = /[A-Z]/.test(password)
+  const pwNumSymOK = /[0-9]|[^A-Za-z0-9]/.test(password)
+  const pwValid = pwLenOK && pwUpperOK && pwNumSymOK
+  const matchOK = mode === 'signup' ? password === confirm : true
 
   useEffect(() => {
-    if (user) router.replace('/')
+    if (user) router.replace('/dashboard')
   }, [user, router])
 
-  // reset state when switching tabs + autofocus email
+  // Initialize tab from /login?mode=signup|signin|reset
+  useEffect(() => {
+    const m = String(router.query?.mode || '').toLowerCase()
+    if (m === 'signup' || m === 'signin' || m === 'reset') {
+      setMode(m)
+    }
+  }, [router.query?.mode, router])
+
+  // reset states on tab switch + autofocus email
   useEffect(() => {
     setErr(null)
     setMsg(null)
@@ -78,15 +53,15 @@ export default function Login() {
     setTimeout(() => emailRef.current?.focus(), 0)
   }, [mode])
 
-  // validators
-  const emailOk = /^\S+@\S+\.\S+$/.test(email)
-
-  const pwLenOK = password.length >= 8
-  const pwUpperOK = /[A-Z]/.test(password)
-  const pwNumSymOK = /[0-9]|[^A-Za-z0-9]/.test(password)
-  const pwValid = pwLenOK && pwUpperOK && pwNumSymOK
-
-  const matchOK = mode === 'signup' ? password === confirm : true
+  // ✅ KEEP URL IN SYNC WITH THE SELECTED TAB
+  function setModeAndUrl(next) {
+    setMode(next)
+    router.replace(
+      { pathname: '/login', query: next === 'signin' ? {} : { mode: next } },
+      undefined,
+      { shallow: true },
+    )
+  }
 
   async function onSignIn(e) {
     e.preventDefault()
@@ -103,7 +78,40 @@ export default function Login() {
     })
     setLoading(false)
     if (error) setErr(error.message)
-    else router.replace('/?onboard=1')
+    else router.replace('/dashboard?onboard=1')
+  }
+
+  async function onSignUp(e) {
+    e.preventDefault()
+    setErr(null)
+    setMsg(null)
+    if (!emailOk) return setErr('Enter a valid email.')
+    if (!pwValid) return setErr('Password doesn’t meet the requirements.')
+    if (!matchOK) return setErr('Passwords do not match.')
+    if (!agreeTerms)
+      return setErr('You must agree to the Terms and Conditions to continue.')
+
+    setLoading(true)
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { email_opt_in: emailOptIn } },
+    })
+    setLoading(false)
+
+    if (error) setErr(error.message)
+    else {
+      const userId = data?.user?.id
+      if (userId) {
+        await supabase
+          .from('profiles')
+          .update({ email_opt_in: emailOptIn })
+          .eq('id', userId)
+      }
+      setMsg(
+        'Account created! Check your email for the confirmation link to login.',
+      )
+    }
   }
 
   async function onReset(e) {
@@ -124,32 +132,47 @@ export default function Login() {
     else setMsg('Reset link sent. Check your email.')
   }
 
+  const submitHandler =
+    mode === 'signin' ? onSignIn : mode === 'signup' ? onSignUp : onReset
+
+  const canSubmit = loading
+    ? false
+    : mode === 'signin'
+      ? emailOk && !!password
+      : mode === 'signup'
+        ? emailOk && pwValid && matchOK && agreeTerms
+        : /* reset */ emailOk
+
   return (
     <div className="page">
       <HeaderBar />
-      <div className="container">
+
+      <div className="auth-wrap">
+        {/* top flourish */}
+        <div className="auth-flourish" aria-hidden />
+
         <div className="auth-card">
-          {/* Tabs */}
-          <div className="auth-tabs" role="tablist" aria-label="Authentication">
+          {/* segmented tabs */}
+          <div className="seg" role="tablist" aria-label="Authentication">
             <button
-              className={`auth-tab ${mode === 'signin' ? 'active' : ''}`}
-              onClick={() => setMode('signin')}
+              className={`seg-btn ${mode === 'signin' ? 'active' : ''}`}
+              onClick={() => setModeAndUrl('signin')}
               role="tab"
               aria-selected={mode === 'signin'}
             >
               Sign in
             </button>
             <button
-              className={`auth-tab ${mode === 'signup' ? 'active' : ''}`}
-              onClick={() => setMode('signup')}
+              className={`seg-btn ${mode === 'signup' ? 'active' : ''}`}
+              onClick={() => setModeAndUrl('signup')}
               role="tab"
               aria-selected={mode === 'signup'}
             >
               Create account
             </button>
             <button
-              className={`auth-tab ${mode === 'reset' ? 'active' : ''}`}
-              onClick={() => setMode('reset')}
+              className={`seg-btn ${mode === 'reset' ? 'active' : ''}`}
+              onClick={() => setModeAndUrl('reset')}
               role="tab"
               aria-selected={mode === 'reset'}
             >
@@ -157,37 +180,27 @@ export default function Login() {
             </button>
           </div>
 
-          {/* Heading */}
+          {/* header */}
           <div className="auth-head">
-            <div className="h1">
+            <h1 className="title">
               {mode === 'signin' && 'Welcome back'}
               {mode === 'signup' && 'Create your account'}
               {mode === 'reset' && 'Reset your password'}
-            </div>
-            <div className="note">
+            </h1>
+            <p className="sub">
               {mode === 'signin' && 'Sign in with your email and password.'}
               {mode === 'signup' && 'Use a strong password you’ll remember.'}
               {mode === 'reset' && 'We’ll email you a reset link.'}
-            </div>
+            </p>
           </div>
 
-          {/* Form */}
-          <form
-            className="auth-form"
-            onSubmit={
-              mode === 'signin'
-                ? onSignIn
-                : mode === 'signup'
-                  ? onSignUp
-                  : onReset
-            }
-            noValidate
-          >
+          {/* form */}
+          <form className="auth-form" onSubmit={submitHandler} noValidate>
             <label className="field">
               <span className="field-label">Email</span>
               <input
                 ref={emailRef}
-                className={`field-input ${email && !emailOk ? 'field-error' : ''}`}
+                className={`input ${email && !emailOk ? 'field-error' : ''}`}
                 type="email"
                 inputMode="email"
                 autoComplete="email"
@@ -201,9 +214,9 @@ export default function Login() {
             {mode !== 'reset' && (
               <label className="field">
                 <span className="field-label">Password</span>
-                <div className="field-with-icon">
+                <div className="with-icon">
                   <input
-                    className={`field-input ${password && mode === 'signup' && !pwValid ? 'field-error' : ''}`}
+                    className={`input ${password && mode === 'signup' && !pwValid ? 'field-error' : ''}`}
                     type={showPw ? 'text' : 'password'}
                     autoComplete={
                       mode === 'signin' ? 'current-password' : 'new-password'
@@ -217,7 +230,7 @@ export default function Login() {
                   />
                   <button
                     type="button"
-                    className="field-icon"
+                    className="icon-btn"
                     onClick={() => setShowPw((v) => !v)}
                     aria-label={showPw ? 'Hide password' : 'Show password'}
                   >
@@ -225,7 +238,6 @@ export default function Login() {
                   </button>
                 </div>
 
-                {/* Live helper list for signup */}
                 {mode === 'signup' && (
                   <ul className="pw-help" aria-live="polite">
                     <li className={pwLenOK ? 'ok' : 'bad'}>
@@ -245,9 +257,9 @@ export default function Login() {
             {mode === 'signup' && (
               <label className="field">
                 <span className="field-label">Confirm password</span>
-                <div className="field-with-icon">
+                <div className="with-icon">
                   <input
-                    className={`field-input ${confirm && !matchOK ? 'field-error' : ''}`}
+                    className={`input ${confirm && !matchOK ? 'field-error' : ''}`}
                     type={showPw2 ? 'text' : 'password'}
                     autoComplete="new-password"
                     placeholder="Re-enter password"
@@ -257,7 +269,7 @@ export default function Login() {
                   />
                   <button
                     type="button"
-                    className="field-icon"
+                    className="icon-btn"
                     onClick={() => setShowPw2((v) => !v)}
                     aria-label={showPw2 ? 'Hide password' : 'Show password'}
                   >
@@ -265,14 +277,14 @@ export default function Login() {
                   </button>
                 </div>
                 {confirm && !matchOK && (
-                  <div className="field-hint">Passwords must match.</div>
+                  <div className="hint">Passwords must match.</div>
                 )}
               </label>
             )}
 
             {mode === 'signup' && (
-              <>
-                <label className="checkbox-line">
+              <div className="checks">
+                <label className="check">
                   <input
                     type="checkbox"
                     checked={agreeTerms}
@@ -281,14 +293,14 @@ export default function Login() {
                   />
                   <span>
                     I agree to the{' '}
-                    <a href="/terms" target="_blank">
+                    <a href="/terms" target="_blank" rel="noreferrer">
                       Terms and Conditions
                     </a>
                     .
                   </span>
                 </label>
 
-                <label className="checkbox-line">
+                <label className="check">
                   <input
                     type="checkbox"
                     checked={emailOptIn}
@@ -296,13 +308,13 @@ export default function Login() {
                   />
                   <span>Keep me updated on new features and tips.</span>
                 </label>
-              </>
+              </div>
             )}
 
             <button
-              className="btn auth-submit"
+              className="btn btn-primary submit"
               type="submit"
-              disabled={loading}
+              disabled={!canSubmit}
             >
               {loading
                 ? 'Please wait…'
@@ -314,47 +326,215 @@ export default function Login() {
             </button>
           </form>
 
-          {err && <div className="auth-alert error">Error: {err}</div>}
-          {msg && <div className="auth-alert ok">{msg}</div>}
+          {err && <div className="alert error">Error: {err}</div>}
+          {msg && <div className="alert ok"> {msg}</div>}
 
-          {mode === 'signin' && (
-            <div className="auth-foot note">
-              <button className="linkbtn" onClick={() => setMode('signup')}>
+          {/* footer links under form */}
+          {mode === 'signin' ? (
+            <div className="foot note">
+              <button
+                className="linkbtn"
+                onClick={() => setModeAndUrl('signup')}
+              >
                 Need an account? Sign up
               </button>
-              &nbsp;·&nbsp;
-              <button className="linkbtn" onClick={() => setMode('reset')}>
+              <span className="sep">·</span>
+              <button
+                className="linkbtn"
+                onClick={() => setModeAndUrl('reset')}
+              >
                 Forgot password?
               </button>
             </div>
-          )}
-          {mode !== 'signin' && (
-            <div className="auth-foot note">
-              <button className="linkbtn" onClick={() => setMode('signin')}>
+          ) : (
+            <div className="foot note">
+              <button
+                className="linkbtn"
+                onClick={() => setModeAndUrl('signin')}
+              >
                 Back to sign in
               </button>
             </div>
           )}
         </div>
       </div>
+
+      {/* Styles scoped to this page */}
       <style jsx>{`
-        .checkbox-line {
+        .auth-wrap {
+          max-width: 520px;
+          margin: 0 auto;
+          padding: 18px 16px 40px;
+        }
+        .auth-flourish {
+          height: 10px;
+          width: 100%;
+          border-radius: 12px;
+          background: linear-gradient(90deg, #2563eb, #22c55e);
+          margin: 6px auto 14px;
+          opacity: 0.12;
+        }
+        .auth-card {
+          background: #fff;
+          border: 1px solid var(--border);
+          border-radius: 18px;
+          box-shadow: var(--shadow-soft);
+          padding: 16px;
+        }
+        .seg {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          background: #f3f4f6;
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 4px;
+          gap: 4px;
+        }
+        .seg-btn {
+          border: none;
+          background: transparent;
+          padding: 8px 10px;
+          border-radius: 10px;
+          font-weight: 700;
+          font-size: 13px;
+          cursor: pointer;
+          color: #374151;
+        }
+        .seg-btn.active {
+          background: #fff;
+          border: 1px solid var(--border);
+        }
+        .auth-head {
+          margin: 14px 0 10px;
+          text-align: left;
+        }
+        .title {
+          margin: 0 0 4px;
+          font-size: 20px;
+          font-weight: 800;
+          color: #111827;
+        }
+        .sub {
+          margin: 0;
+          color: #6b7280;
+          font-size: 14px;
+        }
+        .auth-form {
+          display: grid;
+          gap: 10px;
+          margin-top: 10px;
+        }
+        .field {
+          display: grid;
+          gap: 6px;
+        }
+        .field-label {
+          font-weight: 700;
+          font-size: 13px;
+          color: #111827;
+        }
+        .input {
+          width: 100%;
+          height: 38px;
+          padding: 8px 10px;
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          background: #fff;
+          color: var(--ink);
+          font-size: 14px;
+        }
+        .field-error {
+          border-color: #fca5a5 !important;
+          background: #fff7f7;
+        }
+        .with-icon {
+          position: relative;
+          display: flex;
+          align-items: center;
+        }
+        .icon-btn {
+          position: absolute;
+          right: 8px;
+          border: none;
+          background: transparent;
+          padding: 4px;
+          cursor: pointer;
+          line-height: 0;
+          color: #6b7280;
+        }
+        .pw-help {
+          display: grid;
+          gap: 2px;
+          margin: 6px 0 0;
+          padding-left: 16px;
+          font-size: 12px;
+        }
+        .pw-help .ok {
+          color: #059669;
+        }
+        .pw-help .bad {
+          color: #b91c1c;
+        }
+        .hint {
+          font-size: 12px;
+          color: #b91c1c;
+          margin-top: 4px;
+        }
+        .checks {
+          display: grid;
+          gap: 8px;
+          margin-top: 2px;
+        }
+        .check {
           display: flex;
           align-items: center;
           gap: 8px;
           font-size: 13px;
-          margin-top: 8px;
         }
-        .checkbox-line a {
+        .check a {
           color: #2563eb;
           text-decoration: none;
+        }
+        .submit {
+          width: 100%;
+          margin-top: 6px;
+          border-radius: 12px;
+          padding: 10px 14px;
+          font-size: 15px;
+        }
+        .alert {
+          margin-top: 10px;
+          border-radius: 12px;
+          padding: 10px 12px;
+          border: 1px solid var(--border);
+        }
+        .alert.error {
+          background: #fee2e2;
+          border-color: #fecaca;
+          color: #7f1d1d;
+        }
+        .alert.ok {
+          background: #ecfdf5;
+          border-color: #a7f3d0;
+          color: #065f46;
+        }
+        .foot {
+          margin-top: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        .foot .sep {
+          color: var(--muted);
         }
       `}</style>
     </div>
   )
 }
 
-/* ---- tiny inline SVGs (no external deps) ---- */
+/* inline icons */
 function EyeIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden>

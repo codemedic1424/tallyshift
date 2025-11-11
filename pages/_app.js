@@ -15,6 +15,8 @@ const PUBLIC_ROUTES = [
   '/terms',
   '/privacy',
   '/success',
+  '/business',
+  '/',
 ]
 
 function AuthGuard({ children }) {

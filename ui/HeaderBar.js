@@ -50,30 +50,29 @@ export default function HeaderBar({ title }) {
       {/* LEFT — TallyShift logo + badge */}
       <div
         className="header-title-group"
-        onClick={() => router.push('/')}
+        onClick={() => router.push('/dashboard')}
         role="button"
         tabIndex={0}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') router.push('/')
+          if (e.key === 'Enter' || e.key === ' ') router.push('/dashboard')
         }}
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 6,
+          gap: 8,
           cursor: 'pointer',
         }}
       >
-        <span
+        <img
+          src="/TallyShiftLogo.svg"
+          alt="TallyShift"
           style={{
-            fontSize: 20,
-            fontWeight: 700,
-            lineHeight: 1,
-            display: 'inline-flex',
-            alignItems: 'center',
+            height: 22,
+            width: 'auto',
+            display: 'block',
+            objectFit: 'contain',
           }}
-        >
-          TallyShift
-        </span>
+        />
 
         {tier === 'pro' && (
           <span

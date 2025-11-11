@@ -295,7 +295,7 @@ export default function Profile() {
     if (error) {
       console.error('Error signing out:', error.message)
     } else {
-      window.location.href = '/login'
+      window.location.href = '/'
     }
   }
 

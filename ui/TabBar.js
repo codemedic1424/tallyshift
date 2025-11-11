@@ -14,7 +14,7 @@ export default function TabBar() {
   }, [])
 
   const tabs = [
-    { href: '/', label: 'Home', icon: Home },
+    { href: '/dashboard', label: 'Home', icon: Home },
     { href: '/calendar', label: 'Calendar', icon: Calendar },
     { href: '/history', label: 'History', icon: Clock },
     { href: '/insights', label: 'Insights', icon: BarChart2 },
@@ -25,7 +25,9 @@ export default function TabBar() {
     <nav className="tabbar" role="navigation" aria-label="Bottom navigation">
       {tabs.map((t) => {
         const Icon = t.icon
-        const active = router.pathname === t.href
+        const active =
+          router.pathname === t.href ||
+          (router.pathname.startsWith(t.href) && t.href !== '/')
         return (
           <Link
             key={t.href}
