@@ -15,6 +15,7 @@ import RecentShiftCard from '../ui/RecentShiftCard'
 import UpgradeModal from '../ui/UpgradeModal'
 import NextShiftStrip from '../ui/NextShiftStrip'
 import AddShiftModal from '../ui/AddShiftModal'
+import { showToast } from '../ui/showToast'
 
 function isLikelyIcsUrl(u) {
   if (!u || typeof u !== 'string') return false
@@ -204,6 +205,33 @@ export default function Dashboard() {
     }
   }, [profile?.avatar_path])
 
+  async function handleManualCalendarSync() {
+    if (!user) return alert('Please sign in first.')
+    if (!Array.isArray(settings?.locations)) return alert('No locations found.')
+
+    try {
+      const res = await fetch('/api/sync-calendar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user.id,
+          locations: settings.locations,
+        }),
+      })
+
+      const data = await res.json()
+      if (!data.ok) throw new Error(data.error || 'Sync failed.')
+
+      showToast('Calendar synced!')
+      // ⤴️ after a successful sync, refresh the strip + KPIs
+      await loadNextShift()
+      await loadStatsAndRecent()
+    } catch (err) {
+      console.error('Manual sync error:', err)
+      showToast(`Sync failed: ${err.message}`, 3000, 'error')
+    }
+  }
+
   async function loadStatsAndRecent() {
     setLoading(true)
     const now = new Date()
@@ -254,40 +282,82 @@ export default function Dashboard() {
       return
     }
 
-    function openAddFromNextShift(ns) {
-      const start = ns.start_ts ? new Date(ns.start_ts) : null
-      const end = ns.end_ts ? new Date(ns.end_ts) : null
-      const hours =
-        start && end ? (end.getTime() - start.getTime()) / 3600000 : ''
-
-      const isoDate = start ? dateKeyLocal(start) : dateKeyLocal(new Date())
-
-      setPrefillShift({
-        date: isoDate, // 'YYYY-MM-DD'
-        hours: hours || '',
-        location_id: ns.location_id || '',
-        location_name: ns.location_name || '',
-        notes: ns.title || '',
-        summary: ns.title || '',
-        original_calendar_id: ns.id || null, // for deletion after save
-        original_calendar_external_id: ns.external_id, // prevents re-import
-      })
-
-      setAddDate(isoDate)
-      setAddOpen(true)
-    }
-
     // resolve location name from settings.locations
     const locName = (locId) => {
       const loc = (settings?.locations || []).find((l) => l.id === locId)
       return loc?.name || ''
     }
 
-    try {
-      const nowIso = new Date().toISOString() // e.g. "2025-11-09T22:55:00.000Z"
-      const today = new Date().toISOString().slice(0, 10) // "YYYY-MM-DD"
+    // local-time helper (match calendar.js)
+    const toLocalISOString = (d) =>
+      new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+        .toISOString()
+        .slice(0, 19)
 
-      const { data, error } = await supabase
+    const now = new Date()
+    const todayStr = now.toISOString().slice(0, 10) // YYYY-MM-DD
+    const todayStart = new Date(now)
+    todayStart.setHours(0, 0, 0, 0)
+    const tomorrowStart = new Date(todayStart)
+    tomorrowStart.setDate(todayStart.getDate() + 1)
+
+    const startLocal = toLocalISOString(todayStart)
+    const endLocal = toLocalISOString(tomorrowStart)
+    const nowIso = now.toISOString()
+
+    try {
+      // 1) IDs of calendar events already converted to real shifts
+      const { data: converted, error: convErr } = await supabase
+        .from('shifts')
+        .select('imported_from_calendar_id')
+        .eq('user_id', user.id)
+        .not('imported_from_calendar_id', 'is', null)
+
+      if (convErr) console.warn('converted fetch error:', convErr)
+      const convertedIds = new Set(
+        (converted || []).map((r) => r.imported_from_calendar_id),
+      )
+
+      // 2) Fetch all of today's calendar_shifts (local day), then filter out converted
+      const { data: todays, error: todayErr } = await supabase
+        .from('calendar_shifts')
+        .select(
+          'id, summary, start_time, end_time, location_id, is_all_day, date, external_id',
+        )
+        .eq('user_id', user.id)
+        .gte('start_time', startLocal)
+        .lt('start_time', endLocal)
+        .order('start_time', { ascending: true })
+
+      if (todayErr) throw todayErr
+      const todaysFiltered = (todays || []).filter(
+        (ev) => !convertedIds.has(ev.external_id || ev.id),
+      )
+
+      // in-progress right now
+      const inProgress = todaysFiltered.find((ev) => {
+        const s = ev.start_time ? new Date(ev.start_time) : null
+        const e = ev.end_time ? new Date(ev.end_time) : null
+        return s && now >= s && (!e || now < e)
+      })
+
+      // most recent earlier-today (passed) that is NOT converted
+      const passedToday = (() => {
+        const past = todaysFiltered
+          .filter((ev) => {
+            const s = ev.start_time ? new Date(ev.start_time) : null
+            const e = ev.end_time ? new Date(ev.end_time) : null
+            if (!s) return false
+            if (e) return e <= now
+            // if no end_time, consider it "past" if it started ≥ 2h ago
+            return now.getTime() - s.getTime() > 2 * 3600_000
+          })
+          .sort((a, b) => new Date(b.start_time) - new Date(a.start_time))
+        return past[0] || null
+      })()
+
+      // 3) Next future unconverted event (includes tonight/tomorrow)
+      const { data: nextFuture, error: futureErr } = await supabase
         .from('calendar_shifts')
         .select(
           'id, summary, start_time, end_time, location_id, is_all_day, date, external_id',
@@ -295,38 +365,43 @@ export default function Dashboard() {
         .eq('user_id', user.id)
         .or(
           [
-            // starts in the future
             `start_time.gte.${nowIso}`,
-            // currently in progress (start <= now < end)
             `and(start_time.lte.${nowIso},end_time.gt.${nowIso})`,
-            // all-day events today or later
-            `and(is_all_day.eq.true,date.gte.${today})`,
+            `and(is_all_day.eq.true,date.gte.${todayStr})`,
           ].join(','),
         )
-        // Prefer timed events first, then all-day by date
         .order('start_time', { ascending: true, nullsFirst: false })
         .order('date', { ascending: true, nullsFirst: false })
-        .limit(1)
+        .limit(3)
 
-      if (error) throw error
+      if (futureErr) throw futureErr
+      const nextUnconvertedFuture = (nextFuture || []).find(
+        (ev) => !convertedIds.has(ev.external_id || ev.id),
+      )
 
-      const ev = data?.[0]
-      if (!ev) return setNextShift(null)
+      // 4) Pick: in-progress → passed earlier today → next unconverted future
+      const pick = inProgress || passedToday || nextUnconvertedFuture || null
+      if (!pick) {
+        setNextShift(null)
+        return
+      }
 
       setNextShift({
-        id: ev.id,
-        title: ev.summary || 'Scheduled shift',
-        start_ts: ev.start_time || (ev.date ? `${ev.date}T00:00:00Z` : null),
-        end_ts: ev.end_time || null,
-        location_id: ev.location_id || null,
-        location_name: locName(ev.location_id),
-        external_id: ev.external_id || null,
+        id: pick.id,
+        title: pick.summary || 'Scheduled shift',
+        start_ts:
+          pick.start_time || (pick.date ? `${pick.date}T00:00:00Z` : null),
+        end_ts: pick.end_time || null,
+        location_id: pick.location_id || null,
+        location_name: locName(pick.location_id),
+        external_id: pick.external_id || null,
       })
     } catch (e) {
       console.error('loadNextShift failed:', e)
       setNextShift(null)
     }
   }
+
   async function handleAddSave(payload) {
     if (!user) return alert('Sign in first')
 
@@ -481,6 +556,7 @@ export default function Dashboard() {
           onDismiss={dismissNextShift}
           canDismiss={!hasCalSync}
           onAdd={openAddFromNextShift}
+          onSync={handleManualCalendarSync}
         />
       )}
 

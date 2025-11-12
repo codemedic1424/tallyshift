@@ -1,15 +1,24 @@
 // pages/insights.js
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { useUser } from '../lib/useUser'
 import { useSettings } from '../lib/useSettings'
 import { supabase } from '../lib/supabase'
 import HeaderBar from '../ui/HeaderBar'
 import TabBar from '../ui/TabBar'
 import ShiftDetailsModal from '../ui/ShiftDetailsModal'
-import PaceSettingsModal from '../ui/PaceSettingsModal'
 import { useSpring, animated } from '@react-spring/web'
 import Seg from '../ui/Seg'
+
+function useDebouncedEffect(fn, deps, delay = 600) {
+  const t = useRef()
+  useEffect(() => {
+    clearTimeout(t.current)
+    t.current = setTimeout(() => fn(), delay)
+    return () => clearTimeout(t.current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps)
+}
 
 function AnimatedNumber({ value, formatter }) {
   const [done, setDone] = useState(false)
@@ -72,78 +81,44 @@ function firstOfYear(d) {
   return new Date(d.getFullYear(), 0, 1)
 }
 
-// ---- small sparkline ----
-function Sparkline({
-  values,
-  width = 320,
-  height = 60,
-  stroke = 'currentColor',
-}) {
-  if (!values || values.length === 0) return null
-  const max = Math.max(1, ...values)
-  const min = Math.min(0, ...values)
-  const dx = width / (values.length - 1 || 1)
-  const scaleY = (v) =>
-    max === min ? height / 2 : height - ((v - min) / (max - min)) * height
-  const points = values.map((v, i) => `${i * dx},${scaleY(v)}`).join(' ')
-  return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      width="100%"
-      height={height}
-      preserveAspectRatio="none"
-      style={{ display: 'block' }}
-    >
-      <polyline points={points} fill="none" stroke={stroke} strokeWidth="2" />
-    </svg>
-  )
-}
-
 const TF = {
   THIS_MONTH: 'this_month',
   LAST_3: 'last_3',
   YTD: 'ytd',
 }
-// ---- PaceCard ----
-function PaceCard({ rows, currencyFormatter, settings }) {
-  const [open, setOpen] = useState(false)
-  const [paceType, setPaceType] = useState('monthly')
-  const [expectedShifts, setExpectedShifts] = useState(20)
+// ---- GoalPaceCard (goal tracker with suggestions + shifts-remaining clamp) ----
 
-  // Load saved prefs
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const savedType = localStorage.getItem('pace_type')
-    const savedShifts = Number(localStorage.getItem('pace_expected_shifts'))
-    if (savedType === 'weekly' || savedType === 'monthly')
-      setPaceType(savedType)
-    if (!Number.isNaN(savedShifts) && savedShifts > 0) {
-      setExpectedShifts(savedShifts)
-    }
-  }, [])
+// local-safe helpers available in this file:
+// parseDateOnlyLocal, addDays already exist above in your page file.
 
-  // Determine week start
-  const weekStartsOnMonday = settings?.week_start === 'monday'
-  const today = new Date()
-  let relevantShifts = rows
+function startEndOfThisWeek(today, mondayStart) {
+  const d = new Date(today)
+  const dow = d.getDay() // 0=Sun..6=Sat
+  const offset = mondayStart ? (dow === 0 ? 6 : dow - 1) : dow
+  const start = new Date(d)
+  start.setHours(0, 0, 0, 0)
+  start.setDate(d.getDate() - offset)
 
-  if (paceType === 'weekly') {
-    const currentDay = today.getDay()
-    const offset = weekStartsOnMonday ? currentDay - 1 : currentDay
-    const startOfWeek = new Date(today)
-    startOfWeek.setDate(today.getDate() - (offset < 0 ? 6 : offset))
-    const startIso = startOfWeek.toISOString().split('T')[0]
-    relevantShifts = rows.filter((r) => r.date >= startIso)
-  } else {
-    const month = today.getMonth()
-    const year = today.getFullYear()
-    relevantShifts = rows.filter((r) => {
-      const d = parseDateOnlyLocal(r.date)
-      return d.getMonth() === month && d.getFullYear() === year
-    })
-  }
+  const end = new Date(start)
+  end.setDate(start.getDate() + 6)
+  end.setHours(23, 59, 59, 999)
+  return { start, end }
+}
 
-  const totalNet = relevantShifts.reduce(
+function startEndOfThisMonth(today) {
+  const y = today.getFullYear()
+  const m = today.getMonth()
+  const start = new Date(y, m, 1, 0, 0, 0, 0)
+  const end = new Date(y, m + 1, 0, 23, 59, 59, 999)
+  return { start, end }
+}
+
+function iso(d) {
+  return d.toISOString().split('T')[0]
+}
+
+function sumNetRows(rows) {
+  return rows.reduce(
     (a, r) =>
       a +
       (Number(r.cash_tips || 0) +
@@ -151,87 +126,619 @@ function PaceCard({ rows, currencyFormatter, settings }) {
         Number(r.tip_out_total || 0)),
     0,
   )
-  const shiftCount = relevantShifts.length
-  const avgPerShift = shiftCount > 0 ? totalNet / shiftCount : 0
-  const projectedTotal = avgPerShift * expectedShifts
+}
+function GoalPaceCard({ rows, currencyFormatter, settings }) {
+  const { user } = useUser()
 
-  const title = paceType === 'weekly' ? 'Weekly Pace' : 'Monthly Pace'
+  // ---------- persisted state (mirrors DB row) ----------
+  const [paceType, setPaceType] = useState('monthly') // 'weekly' | 'monthly'
+  const [weeklyGoalCents, setWeeklyGoalCents] = useState(0)
+  const [monthlyGoalCents, setMonthlyGoalCents] = useState(0)
+  const [shiftsRemainingWeekly, setShiftsRemainingWeekly] = useState(0)
+  const [shiftsRemainingMonthly, setShiftsRemainingMonthly] = useState(0)
+  const [loadingRow, setLoadingRow] = useState(true)
+  // display string so we can control leading zeros
+  const [plannedStr, setPlannedStr] = useState('0')
+  const [isEditingGoal, setIsEditingGoal] = useState(false)
+  const prevGoalMetRef = useRef(false)
 
+  // keep display string in sync when type or values change (and when clamp fires)
+  useEffect(() => {
+    const v =
+      paceType === 'weekly' ? shiftsRemainingWeekly : shiftsRemainingMonthly
+    setPlannedStr(String(Math.max(0, v || 0)))
+  }, [paceType, shiftsRemainingWeekly, shiftsRemainingMonthly])
+
+  // helper to set shifts (writes to correct side, clamps, and updates display)
+  function updatePlanned(val) {
+    const v = Math.max(0, Math.min(maxFeasibleShifts, Number(val || 0)))
+    if (paceType === 'weekly') setShiftsRemainingWeekly(v)
+    else setShiftsRemainingMonthly(v)
+    setPlannedStr(String(v))
+  }
+
+  // masked input value for the *current* type
+  const goalCentsCurrent =
+    paceType === 'weekly' ? weeklyGoalCents : monthlyGoalCents
+  const goal = useMemo(() => (goalCentsCurrent || 0) / 100, [goalCentsCurrent])
+  const formatCents = (c) => currencyFormatter.format((c || 0) / 100)
+
+  // derived helpers that respect the current type
+  const plannedShifts =
+    paceType === 'weekly' ? shiftsRemainingWeekly : shiftsRemainingMonthly
+  const setPlannedShifts = (v) =>
+    paceType === 'weekly'
+      ? setShiftsRemainingWeekly(v)
+      : setShiftsRemainingMonthly(v)
+
+  const setMaskedGoal = (next) => {
+    if (paceType === 'weekly') setWeeklyGoalCents(next)
+    else setMonthlyGoalCents(next)
+  }
+
+  // ---------- initial load / ensure row ----------
+  useEffect(() => {
+    if (!user) return
+    let cancelled = false
+    ;(async () => {
+      setLoadingRow(true)
+      const { data, error } = await supabase
+        .from('pace_goals')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (cancelled) return
+      if (error) console.error('pace_goals fetch error', error)
+
+      if (!data) {
+        // create default row
+        const { error: insErr } = await supabase.from('pace_goals').insert({
+          user_id: user.id,
+          pace_type: 'monthly',
+          weekly_goal_cents: 0,
+          monthly_goal_cents: 0,
+          shifts_remaining_weekly: 0,
+          shifts_remaining_monthly: 0,
+        })
+        if (insErr) console.error('pace_goals insert error', insErr)
+        setPaceType('monthly')
+        setWeeklyGoalCents(0)
+        setMonthlyGoalCents(0)
+        setShiftsRemainingWeekly(0)
+        setShiftsRemainingMonthly(0)
+      } else {
+        setPaceType(data.pace_type || 'monthly')
+        setWeeklyGoalCents(data.weekly_goal_cents || 0)
+        setMonthlyGoalCents(data.monthly_goal_cents || 0)
+        setShiftsRemainingWeekly(data.shifts_remaining_weekly || 0)
+        setShiftsRemainingMonthly(data.shifts_remaining_monthly || 0)
+        // hydrate masked input for the current type
+      }
+      setLoadingRow(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [user?.id])
+
+  // ---------- debounced save (upsert) ----------
+  useDebouncedEffect(
+    () => {
+      if (!user || loadingRow) return
+      const payload = {
+        user_id: user.id,
+        pace_type: paceType,
+        weekly_goal_cents: weeklyGoalCents,
+        monthly_goal_cents: monthlyGoalCents,
+        shifts_remaining_weekly: shiftsRemainingWeekly,
+        shifts_remaining_monthly: shiftsRemainingMonthly,
+        updated_at: new Date().toISOString(),
+      }
+      supabase
+        .from('pace_goals')
+        .upsert(payload, { onConflict: 'user_id' })
+        .then(({ error }) => {
+          if (error) console.error('pace_goals save error', error)
+        })
+    },
+    [
+      user?.id,
+      paceType,
+      weeklyGoalCents,
+      monthlyGoalCents,
+      shiftsRemainingWeekly,
+      shiftsRemainingMonthly,
+      loadingRow,
+    ],
+    600,
+  )
+
+  // ---------- your existing math (unchanged) ----------
+  const weekStartsOnMonday = settings?.week_start === 'monday'
+  const today = new Date()
+  const { start: weekStart, end: weekEnd } = startEndOfThisWeek(
+    today,
+    weekStartsOnMonday,
+  )
+  const { start: monthStart, end: monthEnd } = startEndOfThisMonth(today)
+  const currentPeriod =
+    paceType === 'weekly'
+      ? { start: weekStart, end: weekEnd }
+      : { start: monthStart, end: monthEnd }
+  const startIso = iso(currentPeriod.start)
+  const endIso = iso(currentPeriod.end)
+
+  const currentShifts = rows.filter(
+    (r) => r.date >= startIso && r.date <= endIso,
+  )
+  const totalNet = sumNetRows(currentShifts)
+  const completedShifts = currentShifts.length
+
+  const isoToday = iso(today)
+  const trueMaxDaysLeft =
+    Math.max(
+      0,
+      Math.floor(
+        (parseDateOnlyLocal(endIso) - parseDateOnlyLocal(isoToday)) /
+          (1000 * 60 * 60 * 24),
+      ),
+    ) + 1
+  const maxFeasibleShifts = trueMaxDaysLeft
+
+  const [wasClamped, setWasClamped] = useState(false)
+  const effectiveShiftsRemaining = Math.min(
+    plannedShifts || 0,
+    maxFeasibleShifts,
+  )
+  useEffect(() => {
+    prevGoalMetRef.current = false
+  }, [paceType, startIso, endIso])
+
+  useEffect(() => {
+    const clamped = (plannedShifts || 0) > maxFeasibleShifts
+    setWasClamped(clamped)
+    if (clamped) setPlannedShifts(maxFeasibleShifts)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [maxFeasibleShifts])
+
+  const target = goal > 0 ? goal : 0
+  const remainingToGoal = Math.max(0, target - totalNet)
+  const neededPerShift =
+    effectiveShiftsRemaining > 0
+      ? remainingToGoal / effectiveShiftsRemaining
+      : 0
+  const EPS = 0.005 // ~½ cent
+  const hasGoal = Number.isFinite(goalCentsCurrent) && goalCentsCurrent > 0
+  const goalMet = hasGoal && totalNet + EPS >= goal
+  const periodOver = maxFeasibleShifts === 0
+  const pct = target > 0 ? Math.min(100, (totalNet / target) * 100) : 0
+  const title = paceType === 'weekly' ? 'Weekly Goal' : 'Monthly Goal'
+  const tfPill = paceType === 'weekly' ? 'This week' : 'This month'
+  const formatMoney = (v) => currencyFormatter.format(Math.max(0, v || 0))
+  // 🎉 Confetti celebration when goal is met
+  useEffect(() => {
+    if (loadingRow) return
+    if (typeof window === 'undefined') return
+    if (isEditingGoal) return // 👈 do not celebrate while typing
+    if (!goalMet) {
+      prevGoalMetRef.current = false // track transition
+      return
+    }
+    if (prevGoalMetRef.current) return // only fire on false -> true
+
+    // Respect reduced motion
+    const prefersReduced = window.matchMedia?.(
+      '(prefers-reduced-motion: reduce)',
+    )?.matches
+    if (prefersReduced) return
+
+    // Build a "meaningful state" key so we celebrate when:
+    // - user switches weekly/monthly (paceType)
+    // - period changes (start/end)
+    // - goal changes (goalCents)
+    // - progress changes (totalNet)
+    // This also guarantees a celebration on browser refresh (ref resets).
+    const celebrationKey = [
+      paceType,
+      startIso,
+      endIso,
+      `goal:${goalCentsCurrent}`, // cents so it's precise
+      `net:${Math.round(totalNet * 100)}`, // cents as well
+    ].join('|')
+
+    // De-dupe within the same render lifecycle, but allow on any new key
+    if (!window.__paceConfettiLastKey) window.__paceConfettiLastKey = null
+    if (window.__paceConfettiLastKey === celebrationKey) return
+
+    let cancelled = false
+    ;(async () => {
+      const confetti = (await import('canvas-confetti')).default
+
+      // Main burst
+      confetti({
+        particleCount: 150,
+        spread: 80,
+        startVelocity: 45,
+        ticks: 200,
+        origin: { y: 0.6 },
+      })
+
+      // Side streams for ~2s
+      const duration = 2000
+      const end = Date.now() + duration
+      ;(function frame() {
+        if (cancelled) return
+        confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 } })
+        confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 } })
+        if (Date.now() < end) requestAnimationFrame(frame)
+      })()
+
+      // Mark last celebration for this exact state
+      window.__paceConfettiLastKey = celebrationKey
+      prevGoalMetRef.current = true
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    goalMet,
+    paceType,
+    startIso,
+    endIso,
+    goalCentsCurrent,
+    totalNet,
+    loadingRow,
+    isEditingGoal,
+  ])
+
+  // ---------- UI (unchanged, but with setMaskedGoal / setPlannedShifts) ----------
   return (
     <>
       <div
-        className="card pace-card"
-        onClick={() => setOpen(true)}
-        role="button"
-        tabIndex={0}
+        className={`card goal-pace-card ${goalMet ? 'met' : ''} ${periodOver ? 'over' : ''}`}
       >
-        <div className="edit-gear">
-          <span className="gear-icon">⚙</span>
+        <div className="top-row">
+          <div className="h2" style={{ fontSize: 16 }}>
+            {title}
+          </div>
+          <Seg
+            value={paceType}
+            onChange={(v) => setPaceType(v)}
+            options={[
+              { value: 'weekly', label: 'Weekly' },
+              { value: 'monthly', label: 'Monthly' },
+            ]}
+            compact
+          />
         </div>
 
-        <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
-          {title}
-        </div>
-
-        {shiftCount === 0 ? (
-          <div className="note">No shifts recorded yet.</div>
-        ) : (
-          <>
-            <div className="note" style={{ marginBottom: 6 }}>
-              {shiftCount} shift{shiftCount === 1 ? '' : 's'} so far
-            </div>
-            <div className="h1" style={{ marginBottom: 4 }}>
-              On pace for {currencyFormatter.format(projectedTotal)}
+        <div className="progress-wrap" title={`${pct.toFixed(0)}%`}>
+          <div className="progress">
+            <div className="bar" style={{ width: `${pct}%` }} />
+          </div>
+          <div className="progress-row">
+            <div className="note">
+              {goalMet ? 'Goal met' : 'Progress'} · {pct.toFixed(0)}%
+              <span className="pill tf">{tfPill}</span>
+              {wasClamped && (
+                <span className="pill warn">
+                  Auto-adjusted to {maxFeasibleShifts} shift
+                  {maxFeasibleShifts === 1 ? '' : 's'}
+                </span>
+              )}
+              {periodOver && <span className="pill muted">Period ended</span>}
             </div>
             <div className="note">
-              Avg/shift {currencyFormatter.format(avgPerShift)} ·{' '}
-              {expectedShifts} expected {paceType === 'weekly' ? '/wk' : '/mo'}
+              {formatMoney(totalNet)} / {formatMoney(target)}
             </div>
-          </>
-        )}
+          </div>
+        </div>
+
+        <div className="goal-row" onClick={(e) => e.stopPropagation()}>
+          <div className="field">
+            <label className="note">Goal amount</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={formatCents(goalCentsCurrent)}
+              onFocus={() => setIsEditingGoal(true)}
+              onBlur={() => setIsEditingGoal(false)}
+              onKeyDown={(e) => {
+                const nav = [
+                  'ArrowLeft',
+                  'ArrowRight',
+                  'ArrowUp',
+                  'ArrowDown',
+                  'Tab',
+                  'Home',
+                  'End',
+                ]
+                if (nav.includes(e.key)) return
+                if (e.key === 'Backspace') {
+                  e.preventDefault()
+                  setMaskedGoal(Math.floor((goalCentsCurrent || 0) / 10))
+                  return
+                }
+
+                if (e.key === 'Delete') {
+                  e.preventDefault()
+                  setMaskedGoal(0)
+                  return
+                }
+                if (/^[0-9]$/.test(e.key)) {
+                  e.preventDefault()
+                  const digit = Number(e.key)
+                  const next = (goalCentsCurrent || 0) * 10 + digit
+
+                  const MAX_CENTS = 999999999
+                  setMaskedGoal(Math.min(next, MAX_CENTS))
+                  return
+                }
+                if (e.key === 'Enter') return
+                e.preventDefault()
+              }}
+              onChange={() => {}}
+              onPaste={(e) => {
+                e.preventDefault()
+                const text = (e.clipboardData?.getData('text') || '').replace(
+                  /\D/g,
+                  '',
+                )
+                if (!text) return
+                const cents = Number(text)
+                if (!Number.isNaN(cents)) setMaskedGoal(cents)
+              }}
+            />
+            <div className="sub-note">
+              Type numbers only. Last two are cents.
+            </div>
+          </div>
+
+          {/* your suggestions block stays the same; it still calls setGoalCents -> now setMaskedGoal */}
+        </div>
+
+        <div className="stats" onClick={(e) => e.stopPropagation()}>
+          <div className="stat">
+            <div className="label">Completed shifts</div>
+            <div className="value">{completedShifts}</div>
+          </div>
+
+          <div className="divider" />
+
+          <div className="stat">
+            <div className="label">Shifts remaining (planned)</div>
+            <div className="stepper">
+              <button
+                onClick={() =>
+                  updatePlanned((plannedStr ? Number(plannedStr) : 0) - 1)
+                }
+                aria-label="decrease shifts"
+              >
+                −
+              </button>
+
+              {/* use text + inputMode to control leading zeros cleanly */}
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={plannedStr}
+                onChange={(e) => {
+                  // keep only digits
+                  const digits = (e.target.value || '').replace(/\D/g, '')
+                  // strip leading zeros but keep a single 0 if empty
+                  const cleaned = digits.replace(/^0+(?=\d)/, '') || '0'
+                  setPlannedStr(cleaned)
+                }}
+                onBlur={() => {
+                  // commit to state/DB on blur (also clamps to max feasible)
+                  updatePlanned(Number(plannedStr))
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.currentTarget.blur()
+                  }
+                }}
+              />
+
+              <button
+                onClick={() =>
+                  updatePlanned((plannedStr ? Number(plannedStr) : 0) + 1)
+                }
+                aria-label="increase shifts"
+              >
+                +
+              </button>
+            </div>
+
+            <div className="sub-note">
+              Max possible this {paceType === 'weekly' ? 'week' : 'month'}:{' '}
+              {maxFeasibleShifts}
+            </div>
+          </div>
+
+          <div className="divider" />
+
+          <div className="stat">
+            <div className="label">Needed per shift</div>
+            <div className="value">
+              {periodOver ? '—' : formatMoney(neededPerShift)}
+            </div>
+            <div className="sub-note">to hit your goal</div>
+          </div>
+        </div>
       </div>
 
-      <PaceSettingsModal
-        open={open}
-        onClose={() => setOpen(false)}
-        paceType={paceType}
-        setPaceType={setPaceType}
-        expectedShifts={expectedShifts}
-        setExpectedShifts={setExpectedShifts}
-      />
-
-      {/* Scoped styles for this card */}
       <style jsx>{`
-        .pace-card {
+        .goal-pace-card {
           position: relative;
-          cursor: pointer;
+          padding-bottom: 14px;
           transition:
-            transform 0.1s ease,
-            box-shadow 0.1s ease;
+            transform 0.12s ease,
+            box-shadow 0.12s ease;
         }
-        .pace-card:active {
-          transform: scale(0.98);
+        .goal-pace-card.met {
+          outline: 2px solid rgba(34, 197, 94, 0.25);
+          box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.08) inset;
         }
-        .edit-gear {
-          box-shadow: 0 2px 8px rgba(34, 197, 94, 0.25);
-          position: absolute;
-          top: 10px;
-          right: 10px;
-          background: #ffffff;
-          border-radius: 50%;
-          width: 32px;
-          height: 32px;
+        .goal-pace-card.over {
+          opacity: 0.92;
+        }
+
+        .top-row {
           display: flex;
           align-items: center;
-          justify-content: center;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-          border: 1px solid rgba(0, 0, 0, 0.08);
-          pointer-events: none; /* ensures clicks still open the card */
+          justify-content: space-between;
+          gap: 10px;
+          margin-bottom: 6px;
         }
-        .gear-icon {
-          font-size: 16px;
-          color: #4b5563;
-          opacity: 0.9;
+
+        .progress-wrap {
+          display: grid;
+          gap: 8px;
+          margin: 6px 0 2px;
+        }
+        .progress {
+          height: 12px;
+          background: #e5e7eb;
+          border-radius: 999px;
+          overflow: hidden;
+        }
+        .bar {
+          height: 100%;
+          border-radius: 999px;
+          background: linear-gradient(90deg, #22c55e, #16a34a);
+          transition: width 0.6s ease;
+        }
+        .progress-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .pill {
+          display: inline-block;
+          padding: 3px 8px;
+          border-radius: 999px;
+          font-size: 12px;
+          font-weight: 600;
+          margin-left: 8px;
+        }
+        .pill.tf {
+          background: #eef2ff;
+          color: #4338ca;
+        }
+        .pill.warn {
+          background: #fff7ed;
+          color: #9a3412;
+        }
+        .pill.muted {
+          background: #f3f4f6;
+          color: #374151;
+        }
+
+        .goal-row {
+          display: grid;
+          grid-template-columns: 200px 1fr;
+          gap: 12px;
+          margin-top: 12px;
+        }
+        @media (max-width: 560px) {
+          .goal-row {
+            grid-template-columns: 1fr;
+          }
+        }
+        .field {
+          display: grid;
+          gap: 6px;
+        }
+        .field input[type='number'],
+        .field input[type='text'] {
+          height: 36px;
+          border: 1px solid #e5e7eb;
+          border-radius: 10px;
+          padding: 0 10px;
+          font-weight: 600;
+          width: 100%;
+          background: #fff;
+          font-variant-numeric: tabular-nums; /* keeps digits from shifting */
+        }
+
+        .suggestions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          align-items: center;
+        }
+        .sug {
+          border: 1px solid #e5e7eb;
+          background: #fff;
+          border-radius: 999px;
+          padding: 6px 10px;
+          font-weight: 600;
+        }
+
+        .stats {
+          display: grid;
+          grid-template-columns: 1fr 1px 1fr 1px 1fr;
+          align-items: center;
+          gap: 10px;
+          margin-top: 10px;
+        }
+        @media (max-width: 560px) {
+          .stats {
+            grid-template-columns: 1fr;
+          }
+          .divider {
+            display: none;
+          }
+        }
+        .stat .label {
+          font-size: 12px;
+          color: #6b7280;
+        }
+        .stat .value {
+          font-size: 18px;
+          font-weight: 700;
+        }
+        .sub-note {
+          font-size: 12px;
+          color: #9ca3af;
+          margin-top: 4px;
+        }
+        .divider {
+          width: 1px;
+          height: 36px;
+          background: #e5e7eb;
+        }
+
+        /* Inputs/steppers */
+        .stepper {
+          display: grid;
+          grid-template-columns: 36px 1fr 36px;
+          align-items: center;
+          gap: 6px;
+          margin-top: 6px;
+        }
+        .stepper button {
+          height: 36px;
+          border: 1px solid #e5e7eb;
+          border-radius: 10px;
+          background: #fff;
+          font-size: 20px;
+          line-height: 1;
+        }
+        .stepper input {
+          height: 36px;
+          border: 1px solid #e5e7eb;
+          border-radius: 10px;
+          text-align: center;
+          font-weight: 700;
         }
       `}</style>
     </>
@@ -495,8 +1002,9 @@ export default function Insights() {
       .sort((a, b) => b.net - a.net)[0] || null
 
   // sparkline: last 30 days within selection window
-  const today = parseDateOnlyLocal(isoDate(new Date()))
-  const last30Start = addDays(today, -29)
+  const todayLocal = parseDateOnlyLocal(isoDate(new Date()))
+  const last30Start = addDays(todayLocal, -29)
+
   const dailyMap = new Map()
   for (let i = 0; i < 30; i++) {
     const d = addDays(last30Start, i)
@@ -704,28 +1212,13 @@ export default function Insights() {
             </div>
           </div>
         </div>
-        {/* Pace + Sparkline */}
-        <div className="two grid" style={{ gap: 12 }}>
-          <PaceCard
-            rows={rows}
-            currencyFormatter={currencyFormatter}
-            settings={settings}
-          />
+        {/* Goal Pace (full width) */}
+        <GoalPaceCard
+          rows={rows}
+          currencyFormatter={currencyFormatter}
+          settings={settings}
+        />
 
-          <div className="card">
-            <div className="h2" style={{ fontSize: 16, marginBottom: 8 }}>
-              Daily net (last 30 days in range)
-            </div>
-            <Sparkline values={sparkValues} />
-            <div
-              className="note"
-              style={{ display: 'flex', justifyContent: 'space-between' }}
-            >
-              <span>Min {currencyFormatter.format(sparkMin)}</span>
-              <span>Max {currencyFormatter.format(sparkMax)}</span>
-            </div>
-          </div>
-        </div>
         {/* Cash vs Card — only show if both are tracked */}
         {payoutMode === 'both' && (
           <div className="card">
@@ -1558,15 +2051,6 @@ export default function Insights() {
           }
         }
       `}</style>
-
-      {/* Inline styles for KPI layout & overflow handling */}
-      <style jsx>{`
-  /* Responsive KPI grid: 3 → 2 → 1 columns */
-  :global(.grid.three) {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  ...
-`}</style>
 
       <style jsx>{`
         /* Responsive KPI grid: 3 → 2 → 1 columns */
