@@ -26,7 +26,7 @@ struct SignInView2: View {
                     Image("AppLogoLight")
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 260)
+                        .frame(width: 300)
                     Text("Keep tabs on more than your customers")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.9))
