@@ -68,6 +68,7 @@ struct Shift: Identifiable {
     enum InvalidShiftReason {
         case invalidShiftTimes
         case exceedsMaxDuration
+        case tooShort
         
         var severity: ValidationSeverity {
             switch self {
@@ -75,6 +76,8 @@ struct Shift: Identifiable {
                 return .error
             case .exceedsMaxDuration:
                 return .error
+            case .tooShort:
+                return .warning
             }
         }
         
@@ -84,6 +87,8 @@ struct Shift: Identifiable {
                 return "End time must be after start time."
             case .exceedsMaxDuration:
                 return "Shift cannot exceed 24 hours."
+            case .tooShort:
+                return "Shift is too short."
             }
         }
     }
@@ -97,6 +102,10 @@ struct Shift: Identifiable {
         
         if shiftDurationMinutes > Self.maxShiftMinutes {
             return .exceedsMaxDuration
+        }
+        
+        if end.timeIntervalSince(start) < 60 {
+            return .tooShort
         }
         
         return nil

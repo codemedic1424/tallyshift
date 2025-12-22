@@ -15,8 +15,19 @@ struct DashboardView: View {
         List {
             Section("Shifts") {
                 if shiftStore.shifts.isEmpty {
-                    Text("No shifts yet")
-                        .foregroundStyle(.secondary)
+                    VStack(spacing: 8) {
+                        Image(systemName: "calendar.badge.plus")
+                            .font(.largeTitle)
+                            .foregroundStyle(.secondary)
+                        Text("No shifts yet")
+                            .font(.headline)
+                        Text("Tap \"+\" to add a shift.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                    .padding(.vertical, 20 )
                 } else {
                     ForEach(shiftStore.shifts) { shift in
                         VStack(alignment: .leading, spacing: 6) {
@@ -52,7 +63,10 @@ struct DashboardView: View {
             }
         }
         .sheet(isPresented: $showingAddShift) {
-            AddShiftView()
+            NavigationStack {
+                AddShiftView()
+                    .environmentObject(shiftStore)
+            }
         }
     }
 }
