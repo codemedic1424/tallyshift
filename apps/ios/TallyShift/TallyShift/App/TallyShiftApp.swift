@@ -11,6 +11,12 @@ import SwiftUI
 struct TallyShiftApp: App {
     @StateObject private var authViewModel = AuthViewModel()
     
+    init() {
+        #if DEBUG
+        runShiftDebugOnce()
+        #endif
+    }
+
     var body: some Scene {
         WindowGroup {
             NavigationStack {
