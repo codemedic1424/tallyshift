@@ -8,8 +8,33 @@
 import SwiftUI
 
 struct DashboardView: View {
+    @EnvironmentObject var shiftStore: ShiftStore
+    @State private var showingAddShift: Bool = false
+    
     var body: some View {
         List {
+            Section("Shifts") {
+                if shiftStore.shifts.isEmpty {
+                    Text("No shifts yet")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(shiftStore.shifts) { shift in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(shift.job)
+                                .font(.headline)
+                            
+                            Text("\(shift.start.formatted(date: .abbreviated, time: .shortened)) → \(shift.end.formatted(date: .abbreviated, time: .shortened))")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            
+                            Text("Worked: \(shift.workedMinutes) min")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .onDelete(perform: shiftStore.delete)
+                }
+            }
             Section("QA Modules") {
                 NavigationLink("📊 Analytics", destination: AnalyticsView())
                 NavigationLink("🧾 Reports", destination: ReportsView())
@@ -17,10 +42,24 @@ struct DashboardView: View {
             }
         }
         .navigationTitle("Dashboard")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showingAddShift = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+            }
+        }
+        .sheet(isPresented: $showingAddShift) {
+            AddShiftView()
+        }
     }
 }
 
 #Preview {
-    NavigationStack { DashboardView() }
+    NavigationStack {
+        DashboardView()
+            .environmentObject(ShiftStore())
+    }
 }
- 

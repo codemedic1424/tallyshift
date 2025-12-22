@@ -10,6 +10,7 @@ import SwiftUI
 @main
 struct TallyShiftApp: App {
     @StateObject private var authViewModel = AuthViewModel()
+    @StateObject private var shiftStore = ShiftStore()
     
     init() {
         #if DEBUG
@@ -27,6 +28,7 @@ struct TallyShiftApp: App {
                 }
             }
             .environmentObject(authViewModel)
+            .environmentObject(shiftStore)
         }
     }
 }
