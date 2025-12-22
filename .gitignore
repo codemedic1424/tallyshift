@@ -77,3 +77,4 @@ Thumbs.db
 *.icloud
 .idea/
 apps/ios/TallyShift/TallyShift.xcodeproj/project.xcworkspace/xcuserdata/christopherwilshusen.xcuserdatad/UserInterfaceState.xcuserstate
+*.xcuserstate
