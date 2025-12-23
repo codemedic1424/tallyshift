@@ -30,17 +30,21 @@ struct DashboardView: View {
                     .padding(.vertical, 20 )
                 } else {
                     ForEach(shiftStore.shifts) { shift in
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(shift.job)
-                                .font(.headline)
-                            
-                            Text("\(shift.start.formatted(date: .abbreviated, time: .shortened)) → \(shift.end.formatted(date: .abbreviated, time: .shortened))")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                            
-                            Text("Worked: \(shift.workedMinutes) min")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                        NavigationLink {
+                            ShiftDetailView(shift: shift)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(shift.job)
+                                    .font(.headline)
+
+                                Text("\(shift.start.formatted(date: .abbreviated, time: .shortened)) → \(shift.end.formatted(date: .abbreviated, time: .shortened))")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+
+                                Text("Worked: \(shift.workedMinutes) min")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                     .onDelete(perform: shiftStore.delete)

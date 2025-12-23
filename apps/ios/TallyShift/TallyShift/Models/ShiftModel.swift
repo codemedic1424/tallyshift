@@ -1,16 +1,25 @@
 //
-//  ShiftsModel.swift
+//  ShiftModel.swift
 //  TallyShift
 //
 //  Created by Christopher Wilshusen on 12/21/25.
 //
 
 import Foundation
+import SwiftUI
 
-var shifts: [Shift] = []
+// MARK: - Extensions
+
+extension Int {
+    var clampedToZero: Int {
+        Swift.max(self, 0)
+    }
+}
+//MARK: - End Extensions
 
 struct Shift: Identifiable {
     var id: UUID = UUID()
+  
     
     // Source-of-truth timestamps (handles overnight shifts cleanly)
     var start: Date
@@ -27,6 +36,14 @@ struct Shift: Identifiable {
         }
         return total
     }
+    
+    var workedMinutes: Int {
+        (shiftDurationMinutes - unpaidBreakMinutes).clampedToZero
+    }
+
+    var paidMinutes: Int { workedMinutes } //Alias
+
+    var paidHours: Double { Double(paidMinutes) / 60 }
     
     // TODO: Review change in line 33-45 - Reflect on changes and see benefit
     
@@ -48,16 +65,10 @@ struct Shift: Identifiable {
         breaks.filter { $0.isPaid }.reduce(0) { $0 + $1.durationMinutes }
     }
     
-    var workedMinutes: Int {
-        let shiftSeconds = end.timeIntervalSince(start)
-        let shiftMinutes = Int(shiftSeconds / 60)
-        return shiftMinutes - unpaidBreakMinutes
-    }
-    
     var shiftDurationMinutes: Int {
         let shiftSeconds = end.timeIntervalSince(start)
         let shiftDuration = Int(shiftSeconds / 60)
-        return shiftDuration
+        return shiftDuration.clampedToZero
     }
     
     // MARK: Shift validity check and return invalid reason via enums switch statement
@@ -94,6 +105,7 @@ struct Shift: Identifiable {
     }
     
     static let maxShiftMinutes = 24 * 60
+    static let minimumShiftSeconds: TimeInterval = 60
     
     var invalidReason: InvalidShiftReason? {
         if end <= start {
@@ -104,7 +116,7 @@ struct Shift: Identifiable {
             return .exceedsMaxDuration
         }
         
-        if end.timeIntervalSince(start) < 60 {
+        if end.timeIntervalSince(start) < Self.minimumShiftSeconds {
             return .tooShort
         }
         
@@ -139,10 +151,7 @@ struct Break: Identifiable {
     
     var durationMinutes: Int {
         let interval = endTime.timeIntervalSince(startTime)
-        return Int(interval / 60)
+        return Int(interval / 60).clampedToZero
     }
     var isPaid: Bool
 }
-
-
-
