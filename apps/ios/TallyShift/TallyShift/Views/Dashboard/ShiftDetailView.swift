@@ -10,32 +10,111 @@
 import SwiftUI
 
 struct ShiftDetailView: View {
-    let shift: Shift
+    @Binding var shift: Shift
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var draftShift: Shift
+    
+    @State private var isEditing = false
+    
+    init(shift: Binding<Shift>) {
+        self._shift = shift
+        self._draftShift = State(initialValue: shift.wrappedValue)
+    }
     
     var body: some View {
-        List {
-            Section("Summary") {
-                LabeledContent("Job", value: shift.job)
-                LabeledContent("Duration (min)", value: "\(shift.shiftDurationMinutes)")
-                LabeledContent("Worked (min)", value: "\(shift.workedMinutes)")
-                LabeledContent("Paid Hours", value: String(format: "%.2f", shift.paidHours))
+        Form {
+            Section("Job") {
+                TextField("Job", text: $draftShift.job)
             }
-            Section("Breaks") {
-                LabeledContent("Total (min)", value: "\(shift.totalBreakMinutes)")
-                LabeledContent("Paid (min)", value: "\(shift.paidBreakMinutes)")
-                LabeledContent("Unpaid (min)", value: "\(shift.unpaidBreakMinutes)")
-            }
-            Section("Validation") {
-                LabeledContent("Valid", value: shift.isShiftValid ? "Yes" : "No")
-                if let reason = shift.invalidReason {
+            
+            Section("Times") {
+                DatePicker("Start", selection: $draftShift.start)
+                DatePicker("End", selection: $draftShift.end)
+                
+                if let reason = draftShift.invalidReason {
                     Text(reason.description)
-                       // .font(.footnote)
                         .foregroundStyle(.red)
+                        .font(.caption)
+                }
+            }
+            
+            Section("Summary") {
+                LabeledContent("Worked") {
+                    Text("\(draftShift.workedMinutes) min")
+                }
+                LabeledContent("Unpaid breaks") {
+                    Text("\(draftShift.unpaidBreakMinutes) min")
+                }
+            }
+            
+            Section("Breaks") {
+                if draftShift.breaks.isEmpty {
+                    Text("No breaks")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach($draftShift.breaks) { $oneBreak in
+                        // For now, just display it. Next step: tap to edit in a BreakDetailView.
+                        VStack(alignment: .leading) {
+                            Text(oneBreak.isPaid ? "Paid break" : "Unpaid break")
+                                .font(.headline)
+                            Text("\(oneBreak.durationMinutes) min")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .onDelete { offsets in
+                        guard isEditing else { return }
+                        draftShift.breaks.remove(atOffsets: offsets)
+                    }
+                }
+                
+                if isEditing {
+                    Button("Add break") {
+                        let now = Date()
+                        draftShift.breaks.insert(
+                            Break(startTime: now, endTime: now.addingTimeInterval(15 * 60), isPaid: false),
+                            at: 0
+                        )
+                    }
                 }
             }
         }
-        .navigationTitle("Shift")
-        .navigationBarTitleDisplayMode(.inline)
+        .disabled(!isEditing)
+        .navigationTitle("Shift Details")
+// TODO: - Add confirmation prompt on 'Cancel'.
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button(role: .cancel) {
+                    if isEditing {
+                        draftShift = shift      // discard changes
+                        isEditing = false
+                    } else {
+                        dismiss()
+                    }
+                } label: {
+                    Text("Cancel")
+                }
+            }
+            
+            ToolbarItem(placement: .topBarTrailing) {
+                if isEditing {
+                    Button {
+                        shift = draftShift
+                        isEditing = false
+                    } label: {
+                        Text("Save")
+                    }
+                    .disabled(!draftShift.canBeSaved)
+                } else {
+                    Button {
+                        draftShift = shift      // refresh draft from source of truth
+                        isEditing = true
+                    } label: {
+                        Text("Edit")
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -89,11 +168,22 @@ extension Shift {
 
 #Preview("Valid Shift") {
     NavigationStack {
-        ShiftDetailView(shift: .sample())
+        ShiftDetailPreviewWrapper(initial: .sample())
+    }
+}
+
+private struct ShiftDetailPreviewWrapper: View {
+    @State var shift: Shift
+    init(initial: Shift) { _shift = State(initialValue: initial) }
+    
+    var body: some View {
+        ShiftDetailView(shift: $shift) // ✅ binding
     }
 }
 #Preview("Invalid Shift") {
     NavigationStack {
-        ShiftDetailView(shift: .invalidSample())
+        ShiftDetailPreviewWrapper(initial: .invalidSample())
     }
 }
+
+
