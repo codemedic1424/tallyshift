@@ -94,6 +94,7 @@ Reusable components (keep them consistent):
 - **Done**: Merged OR documented understanding you can defend
 
 ### Naming convention (recommended)
+- `Prototype:` pre-design, mockups, branding
 - `Feature:` real product deliverables
 - `Design:` UI/UX decisions, visual system
 - `Learning:` confidence-building work
