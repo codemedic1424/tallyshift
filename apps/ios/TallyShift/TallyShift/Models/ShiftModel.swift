@@ -5,6 +5,8 @@
 //  Created by Christopher Wilshusen on 12/21/25.
 //
 
+// TODO: - Add Tip struct with var for card, credit, total
+
 import Foundation
 import SwiftUI
 
@@ -15,8 +17,9 @@ extension Int {
         Swift.max(self, 0)
     }
 }
-//MARK: - End Extensions
+// MARK: - End Extensions
 
+//
 struct Shift: Identifiable {
     var id: UUID = UUID()
   
